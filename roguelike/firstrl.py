@@ -31,6 +31,10 @@ INVENTORY_WIDTH = 50
 MSG_X = BAR_WIDTH + 2
 MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH - 2
 MSG_HEIGHT = PANEL_HEIGHT - 1
+#experience and level ups
+LEVEL_UP_BASE = 200
+LEVEL_UP_FACTOR = 150
+LEVEL_SCREEN_WIDTH = 40
 #Misc Variables
 HEAL_AMOUNT = 4
 LIGHTNING_DAMAGE = 20
@@ -39,6 +43,7 @@ CONFUSE_NUM_TURNS = 10
 CONFUSE_RANGE = 8
 FIREBALL_RADIUS = 3
 FIREBALL_DAMAGE = 12
+CHARACTER_SCREEN_WIDTH = 30
 
 color_dark_wall = libtcod.Color(0, 0, 100)
 color_light_wall = libtcod.Color(130, 110, 50)
@@ -122,11 +127,12 @@ class Object:
 
 class Fighter:
 	#combat related properties and methods (monster, player, NPC)
-	def __init__(self, hp, defense, power, death_function=None):
+	def __init__(self, hp, defense, power, xp, death_function=None):
 		self.max_hp = hp
 		self.hp = hp
 		self.defense = defense
 		self.power = power
+		self.xp = xp
 		self.death_function = death_function
 		
 	def take_damage(self, damage):
@@ -139,6 +145,8 @@ class Fighter:
 				function = self.death_function
 				if function is not None:
 					function(self.owner)
+				if self.owner != player: #yield experience to the player
+					player.fighter.xp += self.xp
 			
 	def attack(self, target):
 		#a simple formula for attack damage
@@ -248,8 +256,10 @@ def new_game():
 	global player, inventory, game_msgs, game_state, dungeon_level
 	
 	#create the object representing the player
-	fighter_component = Fighter(hp=30, defense=2, power=5, death_function = player_death)
+	fighter_component = Fighter(hp=30, defense=2, power=5, xp=0, death_function = player_death)
 	player = Object(0, 0, '@', 'player', libtcod.white, blocks=True, fighter=fighter_component)
+	
+	player.level = 1
 	
 	#Create Map
 	dungeon_level = 1
@@ -285,6 +295,9 @@ def play_game():
 	
 		#Present the changes (flush) to the screen
 		libtcod.console_flush()
+		
+		#check for level up
+		check_level_up()
 	
 		#erase all objects at their old locations, before they move
 		for object in objects:
@@ -388,7 +401,6 @@ def player_move_or_attack(dx, dy):
 		
 #create function to handle key presses
 def handle_keys():
-	global fov_recompute
 	global key
 
 	if key.vk == libtcod.KEY_ENTER and key.lalt:
@@ -398,19 +410,26 @@ def handle_keys():
 	elif key.vk == libtcod.KEY_ESCAPE:
 		return 'exit'  #exit game
 	
-	#movement variables
-	global playerx, playery
-	
 	if game_state == 'playing':
 		#movement keys
-		if key.vk == libtcod.KEY_UP:
+		if key.vk == libtcod.KEY_UP or key.vk == libtcod.KEY_KP8:
 			player_move_or_attack(0, -1)
-		elif key.vk == libtcod.KEY_DOWN:
+		elif key.vk == libtcod.KEY_DOWN or key.vk == libtcod.KEY_KP2:
 			player_move_or_attack(0, 1)
-		elif key.vk == libtcod.KEY_LEFT:
+		elif key.vk == libtcod.KEY_LEFT or key.vk == libtcod.KEY_KP4:
 			player_move_or_attack(-1, 0)
-		elif key.vk == libtcod.KEY_RIGHT:
+		elif key.vk == libtcod.KEY_RIGHT or key.vk == libtcod.KEY_KP6:
 			player_move_or_attack(1, 0)
+		elif key.vk == libtcod.KEY_HOME or key.vk == libtcod.KEY_KP7:
+			player_move_or_attack(-1, -1)
+		elif key.vk == libtcod.KEY_PAGEUP or key.vk == libtcod.KEY_KP9:
+			player_move_or_attack(1, -1)
+		elif key.vk == libtcod.KEY_END or key.vk == libtcod.KEY_KP1:
+			player_move_or_attack(-1, 1)
+		elif key.vk == libtcod.KEY_PAGEDOWN or key.vk == libtcod.KEY_KP3:
+			player_move_or_attack(1, 1)
+		elif key.vk == libtcod.KEY_KP5:
+			pass  #do nothing ie wait for the monster to come to you
 		else:
 			#test for other keys
 			key_char = chr(key.c)
@@ -421,6 +440,7 @@ def handle_keys():
 					if object.x == player.x and object.y == player.y and object.item:
 						object.item.pick_up()
 						break
+						
 			if key_char == 'i':
 				#show the inventory
 				chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
@@ -437,6 +457,12 @@ def handle_keys():
 				#go down stairs, if the player is on them
 				if stairs.x == player.x and stairs.y == player.y:
 					next_level()
+					
+			if key_char == 'c':
+				#show character info
+				level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
+				msgbox('Character Information\n\nLevel: ' + str(player.level) + '\nExperience: ' + str(player.fighter.xp) + '\nExperience to level up: ' + str(level_up_xp) + '\n\nMaximum HP: ' + str(player.fighter.max_hp) +	'\nAttack: ' + str(player.fighter.power) + '\nDefense: ' + str(player.fighter.defense), CHARACTER_SCREEN_WIDTH)
+				
 			return 'didnt-take-turn'
 
 def get_names_under_mouse():
@@ -675,12 +701,12 @@ def place_objects(room):
 		if not is_blocked(x, y):
 			if libtcod.random_get_int(0, 0, 100) < 80: #80% chance of getting an orc
 				#create an orc
-				fighter_component = Fighter(hp=10, defense=0, power=3, death_function = monster_death)
+				fighter_component = Fighter(hp=10, defense=0, power=3, xp=35, death_function = monster_death)
 				ai_component = BasicMonster()
 				monster = Object(x, y, 'o', 'orc', libtcod.desaturated_green, blocks=True, fighter=fighter_component, ai=ai_component)
 			else:
 				#create a troll
-				fighter_component = Fighter(hp=16, defense=1, power=4, death_function = monster_death)
+				fighter_component = Fighter(hp=16, defense=1, power=4, xp=100, death_function = monster_death)
 				ai_component = BasicMonster()
 				monster = Object(x, y, 'T', 'troll', libtcod.darker_green, blocks=True, fighter=fighter_component, ai=ai_component)
 			
@@ -892,5 +918,30 @@ def target_monster(max_range = None):
 		for obj in objects:
 			if obj.x == x and obj.y == y and obj.fighter and obj != player:
 				return obj
+
+def check_level_up():
+	#see if the player's experience is enough to level-up
+	level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
+	if player.fighter.xp >= level_up_xp:
+		#it is! level up
+		player.level += 1
+		player.fighter.xp -= level_up_xp
+		message('Your battle skills grow stronger! You reached level ' + str(player.level) + '!', libtcod.yellow)
+		
+		choice = None
+		while choice == None: #keep asking until choice is made
+			choice = menu('Level up! Choose a stat to raise:\n', 
+				['Constitution (+20 HP, from ' +str(player.fighter.max_hp) + ')',
+				'Strength (+1 attack, from ' + str(player.fighter.max_hp) + ')',
+				'Agility (+1 defense, from ' + str(player.fighter.defense) + ')'],
+				LEVEL_SCREEN_WIDTH)
 			
+			if choice == 0:
+				player.fighter.max_hp += 20
+				player.fighter.hp += 20
+			elif choice == 1:
+				player.fighter.power += 1
+			elif choice == 2:
+				player.fighter.defense += 1
+				
 main_menu()
