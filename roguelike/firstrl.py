@@ -111,6 +111,23 @@ class Object:
 		#convert to integer so the movement is restricted to the map grid
 		dx = int(round(dx / distance))
 		dy = int(round(dy / distance))
+		if is_blocked(self.x + dx, self.y + dy):
+			#if blocked, check for a better solution
+			#calculate distance of all possible solutions
+			#check if blocked, keep lowest
+			lowest_dist = None
+			for x in range (-1,2):
+				for y in range (-1,2):
+					new_dx = target_x - self.x + x
+					new_dy = target_y - self.y + y
+					distance = math.sqrt(new_dx ** 2 + new_dy ** 2)
+					if not is_blocked(self.x + new_dx, self.y + new_dy):
+						if lowest_dist == None:
+							lowest_dist = distance
+						if (distance <= lowest_dist) and ((dx,dy) != (new_dx,new_dy)):
+							dx = int(round(new_dx / distance))
+							dy = int(round(new_dy / distance))
+							lowest_dist = distance		
 		self.move(dx, dy)
 		
 	def distance_to(self, other):
