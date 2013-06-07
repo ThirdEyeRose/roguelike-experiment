@@ -6,34 +6,34 @@ import shelve
 
 #Constant variables
 
-#Screen and Map Sizes
+#Actual Size of the Window
 SCREEN_WIDTH = 80
 SCREEN_HEIGHT = 50
-LIMIT_FPS = 20
-MAP_WIDTH = 80
-MAP_HEIGHT = 43
-#Dungeon Generation
-ROOM_MAX_SIZE = 10
-ROOM_MIN_SIZE = 6
-MAX_ROOMS = 30
-#FOV Setup
-FOV_ALGO = 0  #default FOV algorithm
-FOV_LIGHT_WALLS = True
-TORCH_RADIUS = 10
+
+#size of the map portion shown on-screen
+CAMERA_WIDTH = 80
+CAMERA_HEIGHT = 43
+
+#size of the map
+MAP_WIDTH = 100
+MAP_HEIGHT = 100
+
 #sizes and coordinates relevant for the GUI
 BAR_WIDTH = 20
 PANEL_HEIGHT = 7
 PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
-INVENTORY_WIDTH = 50
-#message bar constants
 MSG_X = BAR_WIDTH + 2
 MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH - 2
 MSG_HEIGHT = PANEL_HEIGHT - 1
-#experience and level ups
-LEVEL_UP_BASE = 200
-LEVEL_UP_FACTOR = 150
-LEVEL_SCREEN_WIDTH = 40
-#Misc Variables
+INVENTORY_WIDTH = 50
+CHARACTER_SCREEN_WIDTH = 30
+
+#Dungeon Generation
+ROOM_MAX_SIZE = 10
+ROOM_MIN_SIZE = 6
+MAX_ROOMS = 30
+
+#Spell Variables
 HEAL_AMOUNT = 40
 LIGHTNING_DAMAGE = 40
 LIGHTNING_RANGE = 5
@@ -41,7 +41,18 @@ CONFUSE_NUM_TURNS = 10
 CONFUSE_RANGE = 8
 FIREBALL_RADIUS = 3
 FIREBALL_DAMAGE = 25
-CHARACTER_SCREEN_WIDTH = 30
+
+#experience and level ups
+LEVEL_UP_BASE = 200
+LEVEL_UP_FACTOR = 150
+LEVEL_SCREEN_WIDTH = 40
+
+#FOV Setup
+FOV_ALGO = 0  #default FOV algorithm
+FOV_LIGHT_WALLS = True
+TORCH_RADIUS = 10
+
+LIMIT_FPS = 20
 
 color_dark_wall = libtcod.Color(0, 0, 100)
 color_light_wall = libtcod.Color(130, 110, 50)
@@ -107,27 +118,31 @@ class Object:
 		dx = other.x - self.x
 		dy = other.y - self.y
 		return math.sqrt(dx ** 2 + dy ** 2)
+		
+	def distance(self, x, y):
+		#return the distance to some coordinates
+		return math.sqrt((x - self.x) ** 2 + (y - self.y) ** 2)
 	
 	def draw(self):
 		if libtcod.map_is_in_fov(fov_map, self.x, self.y) or (self.always_visible and map[self.x][self.y].explored):
 			#if object is in visible range
+			(x, y) = to_camera_coordinates(self.x, self.y)
 			#set the color and then draw the character that represents this object at its position
-			libtcod.console_set_default_foreground(con, self.color)
-			libtcod.console_put_char(con, self.x, self.y, self.char, libtcod.BKGND_NONE)
+			if x is not None:
+				libtcod.console_set_default_foreground(con, self.color)
+				libtcod.console_put_char(con, x, y, self.char, libtcod.BKGND_NONE)
 		
 	def clear(self):
 		#erase the character that represents this object
-		libtcod.console_put_char(con, self.x, self.y, ' ', libtcod.BKGND_NONE)
+		(x, y) = to_camera_coordinates(self.x, self.y)
+		if x is not None:
+			libtcod.console_put_char(con, x, y, ' ', libtcod.BKGND_NONE)
 		
 	def send_to_back(self):
 		#make this object be drawn first, so all others appear above it if they're in the same tile
 		global objects
 		objects.remove(self)
 		objects.insert(0, self)
-		
-	def distance(self, x, y):
-		#return the distance to some coordinates
-		return math.sqrt((x - self.x) ** 2 + (y - self.y) ** 2)
 
 class Fighter:
 	#combat related properties and methods (monster, player, NPC)
@@ -346,12 +361,13 @@ def new_game():
 	obj.always_visible = True
 	
 def play_game():
-	global key, mouse
+	global camera_x, camera_y, key, mouse
 	
 	player_action = None
-	
 	mouse = libtcod.Mouse()
 	key = libtcod.Key()
+	
+	(camera_x, camera_y) = (0,0)
 	
 	#Start Main Loop
 	while not libtcod.console_is_window_closed():
@@ -538,6 +554,7 @@ def get_names_under_mouse():
 	
 	#return a string with the names of all objects under the mouse
 	(x, y) = (mouse.cx, mouse.cy)
+	(x, y) = (camera_x + x, camera_y + y) #from screen to map coordinates
 	
 	#create a list with the names of all objects at the mouse's coordinates and in FOV
 	names = [obj.name for obj in objects
@@ -545,7 +562,33 @@ def get_names_under_mouse():
 		
 	names = ', '.join(names) #join the names, seperated by commas
 	return names.capitalize()
-			
+
+def move_camera(target_x, target_y):
+	global camera_x, camera_y, fov_recompute
+	
+	#new camera coordinates (top left corner of the screen relative to the map)
+	x = target_x - CAMERA_WIDTH / 2 #coordinates so that the target is at the center of the screen
+	y = target_y - CAMERA_HEIGHT / 2
+	
+	#make sure the camera doesn't see outside the map
+	if x < 0: x = 0
+	if y < 0: y = 0
+	if x > MAP_WIDTH - CAMERA_WIDTH - 1: x = MAP_WIDTH - CAMERA_WIDTH - 1
+	if y > MAP_HEIGHT - CAMERA_HEIGHT - 1: y = MAP_HEIGHT - CAMERA_HEIGHT - 1
+	
+	if x != camera_x or y != camera_y: fov_recompute = True
+	
+	(camera_x, camera_y) = (x, y)
+	
+def to_camera_coordinates(x,y):
+	#conver coordinates on the map to coodinates on the screen
+	(x, y) = (x - camera_x, y - camera_y)
+	
+	if (x < 0 or y < 0 or x >= CAMERA_WIDTH or y >= CAMERA_HEIGHT):
+		return (None, None)  #if it's outside the view, return nothing
+		
+	return (x, y)
+	
 def is_blocked(x, y):
 	#first test the map tile
 	if map[x][y].blocked:
@@ -700,19 +743,24 @@ def render_all():
 	global fov_map, color_light_wall, color_dark_wall
 	global color_light_ground, color_dark_ground
 	global fov_recompute
+	
+	move_camera(player.x, player.y)
 
 	if fov_recompute:
 		#recompute FOV if needed (the player moved or something)
 		fov_recompute = False
 		libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO)
+		libtcod.console_clear(con)
 		
-		for y in range(MAP_HEIGHT):
-			for x in range(MAP_WIDTH):
-				visible = libtcod.map_is_in_fov(fov_map, x, y)
-				wall = map[x][y].block_sight
+		for y in range(CAMERA_HEIGHT):
+			for x in range(CAMERA_WIDTH):
+				(map_x, map_y) = (camera_x + x, camera_y + y)
+				visible = libtcod.map_is_in_fov(fov_map, map_x, map_y)
+				
+				wall = map[map_x][map_y].block_sight
 				if not visible:
 					#it's out of the player's FOV
-					if map[x][y].explored:
+					if map[map_x][map_y].explored:
 					#if it's not visible right now, the player can only see it if it's explored
 						if wall:
 							libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET )
@@ -724,7 +772,7 @@ def render_all():
 						libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET )
 					else:
 						libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
-					map[x][y].explored = True
+					map[map_x][map_y].explored = True
 					
 	#draw all objects in the list
 	for object in objects:
@@ -1003,6 +1051,7 @@ def target_tile(max_range=None):
 		render_all()
 		
 		(x, y) = (mouse.cx, mouse.cy)
+		(x, y) = (camera_x + x, camera_y + y)  #from screen to map coordinates
 		
 		if (mouse.lbutton_pressed and libtcod.map_is_in_fov(fov_map, x, y) and (max_range is None or player.distance(x, y) <= max_range)):
 			return (x, y)
