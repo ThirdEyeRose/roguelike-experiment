@@ -57,13 +57,14 @@ libtcod.sys_set_fps(LIMIT_FPS)
 class Object:
 	#this is a generic object: the player, a monster, an item, the stairs...
 	#it's always represented by a character on the screen.
-	def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None, item = None):
+	def __init__(self, x, y, char, name, color, blocks=False, always_visible=False, fighter=None, ai=None, item = None):
 		self.x = x
 		self.y = y
 		self.char = char
 		self.color = color
 		self.name = name
 		self.blocks = blocks
+		self.always_visible = always_visible
 		self.fighter = fighter
 		if self.fighter:
 			self.fighter.owner = self
@@ -99,7 +100,7 @@ class Object:
 		return math.sqrt(dx ** 2 + dy ** 2)
 	
 	def draw(self):
-		if libtcod.map_is_in_fov(fov_map, self.x, self.y):
+		if libtcod.map_is_in_fov(fov_map, self.x, self.y) or (self.always_visible and map[self.x][self.y].explored):
 			#if object is in visible range
 			#set the color and then draw the character that represents this object at its position
 			libtcod.console_set_default_foreground(con, self.color)
@@ -244,13 +245,14 @@ class Rect:
 		return (self.x1 <= other.x2 and self.x2 > other.x1 and self.y1 <= other.y2 and self.y2 >= other.y1)
 
 def new_game():
-	global player, inventory, game_msgs, game_state
+	global player, inventory, game_msgs, game_state, dungeon_level
 	
 	#create the object representing the player
 	fighter_component = Fighter(hp=30, defense=2, power=5, death_function = player_death)
 	player = Object(0, 0, '@', 'player', libtcod.white, blocks=True, fighter=fighter_component)
 	
 	#Create Map
+	dungeon_level = 1
 	make_map()
 	
 	initialize_fov()
@@ -309,11 +311,14 @@ def save_game():
 	file['inventory'] = inventory
 	file['game_msgs'] = game_msgs
 	file['game_state'] = game_state
+	file['stairs_index'] = objects.index(stairs)
+	file['dungeon_level'] = dungeon_level
 	file.close()
 
 def load_game():
 	#open the previously saved shelve and load the game data
-	global map, objects, player, inventory, game_msgs, game_state
+	global map, objects, player, inventory, game_msgs, game_state, stairs
+	global dungeon_level
 	
 	file = shelve.open('savegame', 'r')
 	map = file['map']
@@ -322,6 +327,8 @@ def load_game():
 	inventory = file['inventory']
 	game_msgs = file['game_msgs']
 	game_state = file['game_state']
+	stairs = objects[file['stairs_index']]
+	dungeon_level = file['dungeon_level']
 	file.close()
 	
 	initialize_fov()
@@ -425,6 +432,11 @@ def handle_keys():
 				chosen_item = inventory_menu('Press the key next to an item to drop it, or any other to cancel.\n')
 				if chosen_item is not None:
 					chosen_item.drop()
+					
+			if key_char == '>':
+				#go down stairs, if the player is on them
+				if stairs.x == player.x and stairs.y == player.y:
+					next_level()
 			return 'didnt-take-turn'
 
 def get_names_under_mouse():
@@ -453,7 +465,7 @@ def is_blocked(x, y):
 	return False
 	
 def make_map():
-	global map, objects
+	global map, objects, stairs
 	
 	#the list of objects with just the player
 	objects = [player]
@@ -526,7 +538,21 @@ def make_map():
 			#finally, append the new room to the list
 			rooms.append(new_room)
 			num_rooms += 1
+			
+	#create stairs at the center of the last room
+	stairs = Object(new_x, new_y, '>', 'stairs', libtcod.white, always_visible = True)
+	objects.append(stairs)
+	stairs.send_to_back() #so it's drawn below monsters
 
+def next_level():
+	global dungeon_level
+	
+	#advance to the next level
+	message('You decend deeper into the heart of the earth...', libtcod.red)
+	dungeon_level += 1
+	make_map() #create a fresh new level!
+	initialize_fov()
+			
 def create_room(room):
 	global map
 	#go through the tiles in the rectangle and make them passable
@@ -628,6 +654,7 @@ def render_all():
 	
 	#show the player's stats
 	render_bar(1, 1, BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp, libtcod.light_red, libtcod.darker_red)
+	libtcod.console_print_ex(panel, 1, 3, libtcod.BKGND_NONE, libtcod.LEFT, 'Dungeon level ' + str(dungeon_level))
 	
 	#display names of objects under the mouse
 	libtcod.console_set_default_foreground(panel, libtcod.light_gray)
