@@ -301,6 +301,7 @@ def play_game():
 def initialize_fov():
 	global fov_recompute, fov_map
 	fov_recompute = True
+	libtcod.console_clear(con)
 	
 	#create the FOV map, according to the generated map
 	fov_map = libtcod.map_new(MAP_WIDTH, MAP_HEIGHT)
@@ -668,6 +669,8 @@ def menu(header, options, width):
 	
 	#calculate total height for the header (after auto-wrap) and one line per option
 	header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
+	if header == '':
+		header_height = 0
 	height = len(options) + header_height
 	
 	#create an off-screen console that represents the menu's window
@@ -713,6 +716,31 @@ def inventory_menu(header):
 	if index is None or len(inventory) == 0: return None
 	return inventory[index].item
 
+def main_menu():
+	img = libtcod.image_load('menu_background1.png')
+	
+	while not libtcod.console_is_window_closed():
+		#show the background image, at twice the regular console resolution
+		libtcod.image_blit_2x(img, 0, 0, 0)
+		
+		#show the game's title, and some credits!
+		libtcod.console_set_default_foreground(0, libtcod.light_yellow)
+		libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER, 'The Universal Reference Frame')
+		libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-2, libtcod.BKGND_NONE, libtcod.CENTER, 'By Pat East')
+		
+		#show options and wait for the player's choice
+		choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 24)
+		
+		if key.vk == libtcod.KEY_ENTER and key.lalt:
+		#Alt+Enter: toggle fullscreen
+			libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
+		
+		if choice == 0: #new game
+			new_game()
+			play_game()
+		elif choice == 2: #quit
+			break
+	
 def cast_heal():
 	#heal the player
 	if player.fighter.hp == player.fighter.max_hp:
@@ -800,5 +828,4 @@ def target_monster(max_range = None):
 			if obj.x == x and obj.y == y and obj.fighter and obj != player:
 				return obj
 			
-new_game()
-play_game()
+main_menu()
