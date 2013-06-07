@@ -16,8 +16,6 @@ MAP_HEIGHT = 43
 ROOM_MAX_SIZE = 10
 ROOM_MIN_SIZE = 6
 MAX_ROOMS = 30
-MAX_ROOM_MONSTERS = 3
-MAX_ROOM_ITEMS = 2
 #FOV Setup
 FOV_ALGO = 0  #default FOV algorithm
 FOV_LIGHT_WALLS = True
@@ -36,22 +34,19 @@ LEVEL_UP_BASE = 200
 LEVEL_UP_FACTOR = 150
 LEVEL_SCREEN_WIDTH = 40
 #Misc Variables
-HEAL_AMOUNT = 4
-LIGHTNING_DAMAGE = 20
+HEAL_AMOUNT = 40
+LIGHTNING_DAMAGE = 40
 LIGHTNING_RANGE = 5
 CONFUSE_NUM_TURNS = 10
 CONFUSE_RANGE = 8
 FIREBALL_RADIUS = 3
-FIREBALL_DAMAGE = 12
+FIREBALL_DAMAGE = 25
 CHARACTER_SCREEN_WIDTH = 30
 
 color_dark_wall = libtcod.Color(0, 0, 100)
 color_light_wall = libtcod.Color(130, 110, 50)
 color_dark_ground = libtcod.Color(50, 50, 150)
 color_light_ground = libtcod.Color(200, 180, 50)
-
-monster_chances = {'orc': 80, 'troll': 20}
-item_chances = {'heal':70, 'lightning':10, 'fireball':10, 'confuse':10}
 
 #Set up Font
 libtcod.console_set_custom_font('arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
@@ -259,7 +254,7 @@ def new_game():
 	global player, inventory, game_msgs, game_state, dungeon_level
 	
 	#create the object representing the player
-	fighter_component = Fighter(hp=30, defense=2, power=5, xp=0, death_function = player_death)
+	fighter_component = Fighter(hp=100, defense=1, power=4, xp=0, death_function = player_death)
 	player = Object(0, 0, '@', 'player', libtcod.white, blocks=True, fighter=fighter_component)
 	
 	player.level = 1
@@ -693,8 +688,26 @@ def render_all():
 	libtcod.console_blit(panel, 0, 0, SCREEN_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_Y)
 
 def place_objects(room):
+	#maximum number of monsters per room
+	max_monsters = from_dungeon_level([[2,1],[3,4],[5,6]])
+	
+	#chance of each monster
+	monster_chances = {}
+	monster_chances['orc'] = 80
+	monster_chances['troll'] = from_dungeon_level([[15,3],[30,5],[60,7]])
+	
+	#maximum number of items per room
+	max_items = from_dungeon_level([[1,1],[2,4]])
+	
+	#chance of each item (by default the have a chance of 0 at level 1, which then goes up)
+	item_chances = {}
+	item_chances['heal'] = 35
+	item_chances['lightning'] = from_dungeon_level([[25,4]])
+	item_chances['fireball'] = from_dungeon_level([[25,6]])
+	item_chances['confuse'] = from_dungeon_level([[10,2]])	
+	
 	#choose random number of monsters
-	num_monsters = libtcod.random_get_int(0, 0, MAX_ROOM_MONSTERS)
+	num_monsters = libtcod.random_get_int(0, 0, max_monsters)
 	
 	for i in range(num_monsters):
 		#choose random spot for this monster
@@ -705,19 +718,19 @@ def place_objects(room):
 			choice = random_choice(monster_chances)
 			if choice == 'orc': #80% chance of getting an orc
 				#create an orc
-				fighter_component = Fighter(hp=10, defense=0, power=3, xp=35, death_function = monster_death)
+				fighter_component = Fighter(hp=20, defense=0, power=4, xp=35, death_function = monster_death)
 				ai_component = BasicMonster()
 				monster = Object(x, y, 'o', 'orc', libtcod.desaturated_green, blocks=True, fighter=fighter_component, ai=ai_component)
 			elif choice == 'troll':
 				#create a troll
-				fighter_component = Fighter(hp=16, defense=1, power=4, xp=100, death_function = monster_death)
+				fighter_component = Fighter(hp=30, defense=2, power=8, xp=100, death_function = monster_death)
 				ai_component = BasicMonster()
 				monster = Object(x, y, 'T', 'troll', libtcod.darker_green, blocks=True, fighter=fighter_component, ai=ai_component)
 			
 			objects.append(monster)
 			
 	#choose random number of items
-	num_items = libtcod.random_get_int(0, 0, MAX_ROOM_ITEMS)
+	num_items = libtcod.random_get_int(0, 0, max_items)
 	
 	for i in range(num_items):
 		#choose random spot for this item
@@ -936,7 +949,7 @@ def check_level_up():
 		while choice == None: #keep asking until choice is made
 			choice = menu('Level up! Choose a stat to raise:\n', 
 				['Constitution (+20 HP, from ' +str(player.fighter.max_hp) + ')',
-				'Strength (+1 attack, from ' + str(player.fighter.max_hp) + ')',
+				'Strength (+1 attack, from ' + str(player.fighter.power) + ')',
 				'Agility (+1 defense, from ' + str(player.fighter.defense) + ')'],
 				LEVEL_SCREEN_WIDTH)
 			
@@ -970,5 +983,12 @@ def random_choice(chances_dict):
 	strings = chances_dict.keys()
 	
 	return strings[random_choice_index(chances)]
+
+def from_dungeon_level(table):
+	#returns a value that depends on level. the table specifies what value occurs after each level, default is 0.
+	for (value, level) in reversed(table):
+		if dungeon_level >= level:
+			return value
+	return 0
 	
 main_menu()
