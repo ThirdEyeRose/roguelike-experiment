@@ -879,7 +879,7 @@ def place_objects(room):
 				#create an orc
 				fighter_component = Fighter(hp=20, defense=0, power=4, xp=35, death_function = monster_death)
 				ai_component = BasicMonster()
-				monster = Object(x, y, 'o', 'orc', libtcod.desaturated_green, blocks=True, fighter=fighter_component, ai=ai_component)
+				monster = Object(x, y, 'o', 'orc', libtcod.light_green, blocks=True, fighter=fighter_component, ai=ai_component)
 			elif choice == 'troll':
 				#create a troll
 				fighter_component = Fighter(hp=30, defense=2, power=8, xp=100, death_function = monster_death)
@@ -1131,7 +1131,7 @@ def check_level_up():
 				player.fighter.base_max_hp += 20
 				player.fighter.hp += 20
 			elif choice == 1:
-				player.fighter.base_base_power += 1
+				player.fighter.base_power += 1
 			elif choice == 2:
 				player.fighter.base_defense += 1
 
