@@ -31,7 +31,7 @@ CHARACTER_SCREEN_WIDTH = 30
 #Dungeon Generation
 ROOM_MAX_SIZE = 10
 ROOM_MIN_SIZE = 6
-MAX_ROOMS = 30
+MAX_ROOMS = 45
 
 #Spell Variables
 HEAL_AMOUNT = 40
@@ -54,10 +54,10 @@ TORCH_RADIUS = 10
 
 LIMIT_FPS = 20
 
-color_dark_wall = libtcod.Color(0, 0, 100)
-color_light_wall = libtcod.Color(130, 110, 50)
-color_dark_ground = libtcod.Color(50, 50, 150)
-color_light_ground = libtcod.Color(200, 180, 50)
+color_dark_wall = libtcod.Color(56, 50, 19)
+color_light_wall = libtcod.Color(74, 66, 25)
+color_dark_ground = libtcod.Color(102, 94, 46)
+color_light_ground = libtcod.Color(140, 133, 93)
 
 #Set up Font
 libtcod.console_set_custom_font('arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
@@ -163,9 +163,11 @@ class Object:
 
 class Fighter:
 	#combat related properties and methods (monster, player, NPC)
-	def __init__(self, hp, defense, power, xp, death_function=None):
+	def __init__(self, hp, defense, power, xp, mp=0, death_function=None):
 		self.base_max_hp = hp
 		self.hp = hp
+		self.base_max_mp = mp
+		self.mp = mp
 		self.base_defense = defense
 		self.base_power = power
 		self.xp = xp
@@ -185,6 +187,11 @@ class Fighter:
 	def max_hp(self):  #return actual max_hp, by summing up the bonuses from all equipped items
 		bonus = sum(equipment.max_hp_bonus for equipment in get_all_equipped(self.owner))
 		return self.base_max_hp + bonus
+		
+	@property
+	def max_mp(self):  #return actual max_mp, by summing up the bonuses from all equipped items
+		bonus = sum(equipment.max_mp_bonus for equipment in get_all_equipped(self.owner))
+		return self.base_max_mp + bonus
 		
 	def take_damage(self, damage):
 		#apply damage if possible
@@ -289,12 +296,13 @@ class Item:
 
 class Equipment:
 	#an object that can be equipped, yielding bonuses. automatically adds the Item component.
-	def __init__(self, slot, power_bonus=0, defense_bonus=0, max_hp_bonus=0):
+	def __init__(self, slot, power_bonus=0, defense_bonus=0, max_hp_bonus=0, max_mp_bonus=0):
 		self.slot = slot
 		self.is_equipped = False
 		self.power_bonus = power_bonus
 		self.defense_bonus = defense_bonus
 		self.max_hp_bonus = max_hp_bonus
+		self.max_mp_bonus = max_mp_bonus
 		
 	def toggle_equip(self): #toggle equpi/dequip status
 		if self.is_equipped:
@@ -320,9 +328,9 @@ class Equipment:
 		
 class Tile:
 	#a tile of the map and its properties
-	def __init__(self, blocked, block_sight = None):
+	def __init__(self, blocked, explored=False, block_sight = None):
 		self.blocked = blocked
-		self.explored = False
+		self.explored = explored
 		
 		#by default, if a tile is blocked, it also blocks sight
 		if block_sight is None: block_sight = blocked
@@ -346,16 +354,16 @@ class Rect:
 		return (self.x1 <= other.x2 and self.x2 > other.x1 and self.y1 <= other.y2 and self.y2 >= other.y1)
 
 def new_game():
-	global player, inventory, game_msgs, game_state, dungeon_level
+	global player, inventory, game_msgs, game_state, depth
 	
 	#create the object representing the player
-	fighter_component = Fighter(hp=100, defense=1, power=2, xp=0, death_function = player_death)
+	fighter_component = Fighter(hp=100, mp=5, defense=1, power=2, xp=0, death_function = player_death)
 	player = Object(0, 0, '@', 'player', libtcod.white, blocks=True, fighter=fighter_component)
 	
 	player.level = 1
 	
 	#Create Map
-	dungeon_level = 1
+	depth = 0
 	make_map()
 	
 	initialize_fov()
@@ -426,13 +434,13 @@ def save_game():
 	file['game_msgs'] = game_msgs
 	file['game_state'] = game_state
 	file['stairs_index'] = objects.index(stairs)
-	file['dungeon_level'] = dungeon_level
+	file['depth'] = depth
 	file.close()
 
 def load_game():
 	#open the previously saved shelve and load the game data
 	global map, objects, player, inventory, game_msgs, game_state, stairs
-	global dungeon_level
+	global depth
 	
 	file = shelve.open('savegame', 'r')
 	map = file['map']
@@ -442,7 +450,7 @@ def load_game():
 	game_msgs = file['game_msgs']
 	game_state = file['game_state']
 	stairs = objects[file['stairs_index']]
-	dungeon_level = file['dungeon_level']
+	depth = file['depth']
 	file.close()
 	
 	initialize_fov()
@@ -562,7 +570,7 @@ def handle_keys():
 			if key_char == 'c':
 				#show character info
 				level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
-				msgbox('Character Information\n\nLevel: ' + str(player.level) + '\nExperience: ' + str(player.fighter.xp) + '\nExperience to level up: ' + str(level_up_xp) + '\n\nMaximum HP: ' + str(player.fighter.max_hp) +	'\nAttack: ' + str(player.fighter.power) + '\nDefense: ' + str(player.fighter.defense), CHARACTER_SCREEN_WIDTH)
+				msgbox('Character Information\n\nLevel: ' + str(player.level) + '\nExperience: ' + str(player.fighter.xp) + '\nExperience to level up: ' + str(level_up_xp) + '\n\nMaximum HP: ' + str(player.fighter.max_hp) + '\n\nMaximum MP: ' + str(player.fighter.max_mp) +	'\nAttack: ' + str(player.fighter.power) + '\nDefense: ' + str(player.fighter.defense), CHARACTER_SCREEN_WIDTH)
 				
 			return 'didnt-take-turn'
 
@@ -619,15 +627,26 @@ def is_blocked(x, y):
 	return False
 	
 def make_map():
-	global map, objects, stairs
+	global map, objects, stairs, depth
 	
 	#the list of objects with just the player
 	objects = [player]
 	
-	#fill map with "unblocked" tiles
-	map = [[ Tile(True)
-		for y in range(MAP_HEIGHT) ]
-			for x in range(MAP_WIDTH) ]
+	if depth == 0:
+		#fill map with "blocked" tiles
+		map = [[ Tile(True, explored=True)
+			for y in range(MAP_HEIGHT) ]
+				for x in range(MAP_WIDTH) ]
+		for x in range(1, MAP_WIDTH - 2):
+			for y in range(1, MAP_HEIGHT - 2):
+				map[x][y].blocked = False
+				map[x][y].block_sight = False	
+			
+	else:
+		#fill map with "blocked" tiles
+		map = [[ Tile(True)
+			for y in range(MAP_HEIGHT) ]
+				for x in range(MAP_WIDTH) ]
 			
 	rooms = []
 	num_rooms = 0
@@ -699,11 +718,11 @@ def make_map():
 	stairs.send_to_back() #so it's drawn below monsters
 
 def next_level():
-	global dungeon_level
+	global depth
 	
 	#advance to the next level
 	message('You decend deeper into the heart of the earth...', libtcod.red)
-	dungeon_level += 1
+	depth += 1
 	make_map() #create a fresh new level!
 	initialize_fov()
 			
@@ -759,7 +778,7 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
 def render_all():
 	global fov_map, color_light_wall, color_dark_wall
 	global color_light_ground, color_dark_ground
-	global fov_recompute
+	global fov_recompute, level_up_xp
 	
 	move_camera(player.x, player.y)
 
@@ -813,7 +832,10 @@ def render_all():
 	
 	#show the player's stats
 	render_bar(1, 1, BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp, libtcod.light_red, libtcod.darker_red)
-	libtcod.console_print_ex(panel, 1, 3, libtcod.BKGND_NONE, libtcod.LEFT, 'Dungeon level ' + str(dungeon_level))
+	render_bar(1, 2, BAR_WIDTH, 'MP', player.fighter.mp, player.fighter.max_mp, libtcod.light_blue, libtcod.darker_blue)
+	level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
+	render_bar(1, 3, BAR_WIDTH, 'XP', player.fighter.xp, level_up_xp, libtcod.light_yellow, libtcod.darker_yellow)
+	libtcod.console_print_ex(panel, 1, 5, libtcod.BKGND_NONE, libtcod.LEFT, 'Depth ' + str(depth))
 	
 	#display names of objects under the mouse
 	libtcod.console_set_default_foreground(panel, libtcod.light_gray)
@@ -824,24 +846,24 @@ def render_all():
 
 def place_objects(room):
 	#maximum number of monsters per room
-	max_monsters = from_dungeon_level([[2,1],[3,4],[5,6]])
+	max_monsters = from_depth([[2,1],[3,4],[5,6]])
 	
 	#chance of each monster
 	monster_chances = {}
 	monster_chances['orc'] = 80
-	monster_chances['troll'] = from_dungeon_level([[15,3],[30,5],[60,7]])
+	monster_chances['troll'] = from_depth([[15,3],[30,5],[60,7]])
 	
 	#maximum number of items per room
-	max_items = from_dungeon_level([[1,1],[2,4]])
+	max_items = from_depth([[1,1],[2,4]])
 	
 	#chance of each item (by default the have a chance of 0 at level 1, which then goes up)
 	item_chances = {}
 	item_chances['heal'] = 35
-	item_chances['lightning'] = from_dungeon_level([[25,4]])
-	item_chances['fireball'] = from_dungeon_level([[25,6]])
-	item_chances['confuse'] = from_dungeon_level([[10,2]])	
-	item_chances['sword'] = from_dungeon_level([[5,4]])
-	item_chances['shield'] = from_dungeon_level([[15,8]])
+	item_chances['lightning'] = from_depth([[25,4]])
+	item_chances['fireball'] = from_depth([[25,6]])
+	item_chances['confuse'] = from_depth([[10,2]])	
+	item_chances['sword'] = from_depth([[5,4]])
+	item_chances['shield'] = from_depth([[15,8]])
 	
 	#choose random number of monsters
 	num_monsters = libtcod.random_get_int(0, 0, max_monsters)
@@ -1136,10 +1158,10 @@ def random_choice(chances_dict):
 	
 	return strings[random_choice_index(chances)]
 
-def from_dungeon_level(table):
+def from_depth(table):
 	#returns a value that depends on level. the table specifies what value occurs after each level, default is 0.
 	for (value, level) in reversed(table):
-		if dungeon_level >= level:
+		if depth >= level:
 			return value
 	return 0
 	
