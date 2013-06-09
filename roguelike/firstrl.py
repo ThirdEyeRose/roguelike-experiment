@@ -130,6 +130,14 @@ class Object:
 							lowest_dist = distance		
 		self.move(dx, dy)
 		
+	def move_random(self):
+		while True:
+			x = libtcod.random_get_int(0, -1, 1)
+			y = libtcod.random_get_int(0, -1, 1)
+			if not is_blocked(self.x + x, self.y + y):
+				self.move(x, y)
+				break
+		
 	def distance_to(self, other):
 		#return the distance to another object
 		dx = other.x - self.x
@@ -252,7 +260,13 @@ class ConfusedMonster:
 		else:
 			self.owner.ai = self.old_ai
 			message('The ' + self.owner.name + ' is no longer confused!', libtcod.red)
-				
+
+class NeutralCreature:
+	#AI for a purely neutral creature
+	def take_turn(self):
+		self.owner.move_random()
+		
+			
 class Item:
 	def __init__(self, use_function=None):
 		self.use_function = use_function
@@ -846,11 +860,12 @@ def render_all():
 
 def place_objects(room):
 	#maximum number of monsters per room
-	max_monsters = from_depth([[2,1],[3,4],[5,6]])
+	max_monsters = from_depth([[2,0],[3,4],[5,6]])
 	
 	#chance of each monster
 	monster_chances = {}
-	monster_chances['orc'] = 80
+	monster_chances['dungeon bunny'] = 2
+	monster_chances['orc'] = from_depth([[80,1]])
 	monster_chances['troll'] = from_depth([[15,3],[30,5],[60,7]])
 	
 	#maximum number of items per room
@@ -885,6 +900,11 @@ def place_objects(room):
 				fighter_component = Fighter(hp=30, defense=2, power=8, xp=100, death_function = monster_death)
 				ai_component = BasicMonster()
 				monster = Object(x, y, 'T', 'troll', libtcod.darker_green, blocks=True, fighter=fighter_component, ai=ai_component)
+			elif choice == 'dungeon bunny':
+				#create a dungeon bunny (sample neutral NPC)
+				fighter_component = Fighter(hp=5, defense=1, power=100, xp=2, death_function = monster_death)
+				ai_component = NeutralCreature()
+				monster = Object(x, y, '@', 'dungeon bunny', libtcod.light_yellow, blocks=True, fighter=fighter_component, ai=ai_component)
 			
 			objects.append(monster)
 			
