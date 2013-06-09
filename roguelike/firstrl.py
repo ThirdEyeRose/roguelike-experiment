@@ -80,6 +80,14 @@ class Map:
 		self.name = name
 		self.tiles = []
 		self.objects = []
+		self.portals = []
+		
+class Portal:
+	#this class records relevant information regarding map exits
+	def __init__(x, y, destination)
+		self.x = x
+		self.y = y
+		self.destination = destination
 
 class Object:
 	#this is a generic object: the player, a monster, an item, the stairs...
