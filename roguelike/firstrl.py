@@ -88,6 +88,11 @@ class Portal:
 		self.x = x
 		self.y = y
 		self.destination = destination
+		#when portals are created, they also record data about
+		#which portal they are linked to.  This should be in 
+		#the form of: world.maps['MAPNAME'].portals[PORTALINDEX]
+		#For simplicity's sake, at the beginning, each map will
+		#only have 2 portal indices - 0 for up, 1 for down
 
 class Object:
 	#this is a generic object: the player, a monster, an item, the stairs...
