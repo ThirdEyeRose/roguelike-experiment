@@ -449,13 +449,14 @@ def save_game():
 	file['inventory'] = inventory
 	file['game_msgs'] = game_msgs
 	file['game_state'] = game_state
-	file['stairs_index'] = world.objects.index(stairs)
+	file['stairs_up_index'] = world.objects.index(stairs_up)
+	file['stairs_down_index'] = world.objects.index(stairs_down)
 	file['depth'] = depth
 	file.close()
 
 def load_game():
 	#open the previously saved shelve and load the game data
-	global player, inventory, game_msgs, game_state, stairs, world
+	global player, inventory, game_msgs, game_state, stairs_up, stairs_down, world
 	global depth
 	
 	file = shelve.open('savegame', 'r')
@@ -465,7 +466,8 @@ def load_game():
 	inventory = file['inventory']
 	game_msgs = file['game_msgs']
 	game_state = file['game_state']
-	stairs = world.objects[file['stairs_index']]
+	stairs_up = world.objects[file['stairs_up_index']]
+	stairs_down = world.objects[file['stairs_down_index']]
 	depth = file['depth']
 	file.close()
 	
@@ -580,8 +582,13 @@ def handle_keys():
 					
 			if key_char == '>':
 				#go down stairs, if the player is on them
-				if stairs.x == player.x and stairs.y == player.y:
+				if stairs_down.x == player.x and stairs_down.y == player.y:
 					next_level()
+					
+			if key_char == '<':
+				#go up stairs, if the player is on them
+				if stairs_up.x == player.x and stairs_up.y == player.y:
+					prev_level()
 					
 			if key_char == 'c':
 				#show character info
@@ -643,7 +650,7 @@ def is_blocked(x, y):
 	return False
 	
 def make_map():
-	global stairs, depth, world
+	global stairs_up, stairs_down, depth, world
 	
 	world.maps['area' + str(depth)] = Map('area' + str(depth))
 	#the list of objects with just the player
@@ -707,6 +714,11 @@ def make_map():
 						player.x = x
 						player.y = y
 						placed = True
+						if depth != 0:
+							#create stairs at the center of the last room
+							stairs_up = Object(new_x, new_y, '<', 'stairs up', libtcod.white, always_visible = True)
+							world.objects.append(stairs_up)
+							stairs_up.send_to_back() #so it's drawn below monsters
 					else:
 						x += 1
 			else:
@@ -731,9 +743,9 @@ def make_map():
 			num_rooms += 1
 			
 	#create stairs at the center of the last room
-	stairs = Object(new_x, new_y, '>', 'stairs', libtcod.white, always_visible = True)
-	world.objects.append(stairs)
-	stairs.send_to_back() #so it's drawn below monsters
+	stairs_down = Object(new_x, new_y, '>', 'stairs down', libtcod.white, always_visible = True)
+	world.objects.append(stairs_down)
+	stairs_down.send_to_back() #so it's drawn below monsters
 
 def next_level():
 	global depth
@@ -741,6 +753,15 @@ def next_level():
 	#advance to the next level
 	message('You decend deeper into the heart of the earth...', libtcod.red)
 	depth += 1
+	make_map() #create a fresh new level!
+	initialize_fov()
+	
+def prev_level():
+	global depth
+	
+	#advance to the next level
+	message('You decend deeper into the heart of the earth...', libtcod.red)
+	depth -= 1
 	make_map() #create a fresh new level!
 	initialize_fov()
 			
