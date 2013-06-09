@@ -73,11 +73,13 @@ class World:
 	def __init__(self, objects = None, map = None):
 		self.objects = objects
 		self.map = map
+		self.maps = {}
 		
 class Map:
 	#this class stores map information so that maps can be persistant
 	def __init__(self, name):
 		self.name = name
+		self.tiles = []
 
 class Object:
 	#this is a generic object: the player, a monster, an item, the stairs...
@@ -643,6 +645,7 @@ def is_blocked(x, y):
 def make_map():
 	global stairs, depth, world
 	
+	world.maps['area' + str(depth)] = Map('area' + str(depth))
 	#the list of objects with just the player
 	world.objects = [player]
 	
@@ -655,6 +658,17 @@ def make_map():
 			for y in range(1, MAP_HEIGHT - 2):
 				world.map[x][y].blocked = False
 				world.map[x][y].block_sight = False	
+				
+	#Testing of the map class			
+	if depth == 0:
+		#fill map with "blocked" tiles
+		world.maps['area' + str(depth)].tiles = [[ Tile(True, explored=True)
+			for y in range(MAP_HEIGHT) ]
+				for x in range(MAP_WIDTH) ]
+		for x in range(1, MAP_WIDTH - 2):
+			for y in range(1, MAP_HEIGHT - 2):
+				world.maps['area' + str(depth)].tiles[x][y].blocked = False
+				world.maps['area' + str(depth)].tiles[x][y].block_sight = False	
 			
 	else:
 		#fill map with "blocked" tiles
