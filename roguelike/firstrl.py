@@ -345,8 +345,8 @@ class Equipment:
 		
 class Portal:
 	#this class records relevant information regarding map exits
-	def __init__(destination)
-		self.destination = destination
+	def __init__(self, dest_map, dest_portal_index):
+		self.dest_map = dest_map[dest_portal_index]
 		#when portals are created, they also record data about
 		#which portal they are linked to.  This should be in 
 		#the form of: world.maps['MAPNAME'].portals[PORTALINDEX]
@@ -393,7 +393,8 @@ def new_game():
 	player.level = 1
 	
 	#Create Map
-	depth = 0
+	#depth = 0
+	depth = 1 #testing
 	make_map()
 	
 	initialize_fov()
@@ -724,8 +725,13 @@ def make_map():
 						placed = True
 						if depth != 0:
 							#create stairs at the center of the last room
-							stairs_up = Object(new_x, new_y, '<', 'stairs up', libtcod.white, always_visible = True)
+							if depth == 1:
+								portal = Portal('area' + str(depth - 1), 0)
+							else:
+								portal = Portal('area' + str(depth - 1), 1)
+							stairs_up = Object(new_x, new_y, '<', 'stairs up', libtcod.white, always_visible = True, portal = portal)
 							world.maps['area' + str(depth)].objects.append(stairs_up)
+							world.maps['area' + str(depth)].portals.append(stairs_up)
 							stairs_up.send_to_back() #so it's drawn below monsters
 					else:
 						x += 1
