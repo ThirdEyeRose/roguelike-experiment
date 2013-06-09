@@ -443,15 +443,11 @@ def play_game():
 def save_game():
 	#open a new empty shelve (possibly overwriting an old one) to write the game data
 	file = shelve.open('savegame', 'n')
-	file['map'] = world.maps['area' + str(depth)].tiles
-	file['objects'] = world.maps['area' + str(depth)].objects
+	file['world'] = world
 	file['player_index'] = world.maps['area' + str(depth)].objects.index(player) #index of player in objects list
 	file['inventory'] = inventory
 	file['game_msgs'] = game_msgs
 	file['game_state'] = game_state
-	if 'stairs_up' in globals():
-		file['stairs_up_index'] = world.maps['area' + str(depth)].objects.index(stairs_up)
-	file['stairs_down_index'] = world.maps['area' + str(depth)].objects.index(stairs_down)
 	file['depth'] = depth
 	file.close()
 
@@ -461,14 +457,11 @@ def load_game():
 	global depth
 	
 	file = shelve.open('savegame', 'r')
-	world.maps['area' + str(depth)].tiles = file['map']
-	world.maps['area' + str(depth)].objects = file['objects']
+	world = file['world']
 	player = world.maps['area' + str(depth)].objects[file['player_index']] #get index of player in objects list and access it
 	inventory = file['inventory']
 	game_msgs = file['game_msgs']
 	game_state = file['game_state']
-	stairs_up = world.maps['area' + str(depth)].objects[file['stairs_up_index']]
-	stairs_down = world.maps['area' + str(depth)].objects[file['stairs_down_index']]
 	depth = file['depth']
 	file.close()
 	
@@ -630,7 +623,7 @@ def move_camera(target_x, target_y):
 	(camera_x, camera_y) = (x, y)
 	
 def to_camera_coordinates(x,y):
-	#conver coordinates on the map to coodinates on the screen
+	#convert coordinates on the map to coordinates on the screen
 	(x, y) = (x - camera_x, y - camera_y)
 	
 	if (x < 0 or y < 0 or x >= CAMERA_WIDTH or y >= CAMERA_HEIGHT):
@@ -656,7 +649,7 @@ def make_map():
 	world.maps['area' + str(depth)] = Map('area' + str(depth))
 	#the list of objects with just the player
 	world.maps['area' + str(depth)].objects = [player]
-				
+			
 	#Using the map class			
 	if depth == 0:
 		#fill map with "blocked" tiles
@@ -673,7 +666,7 @@ def make_map():
 		world.maps['area' + str(depth)].tiles = [[ Tile(True)
 			for y in range(MAP_HEIGHT) ]
 				for x in range(MAP_WIDTH) ]
-			
+		
 	rooms = []
 	num_rooms = 0
 	
@@ -684,17 +677,17 @@ def make_map():
 		#random position without going out of the boundaries of the map
 		x = libtcod.random_get_int(0, 0, MAP_WIDTH - w - 1)
 		y = libtcod.random_get_int(0, 0, MAP_HEIGHT - h - 1)
-		
+	
 		#"Rect" class makes rectangles easier to work with
 		new_room = Rect(x, y, w, h)
-		
+	
 		#run through the other rooms and see if they intersect with this one
 		failed = False
 		for other_room in rooms:
 			if new_room.intersect(other_room):
 				failed = True
 				break
-		
+	
 		if not failed:
 			#this means there is no intersections, so this room is valid
 			
@@ -748,6 +741,8 @@ def make_map():
 	world.maps['area' + str(depth)].objects.append(stairs_down)
 	stairs_down.send_to_back() #so it's drawn below monsters
 
+	
+	
 def next_level():
 	global depth
 	
@@ -761,7 +756,7 @@ def prev_level():
 	global depth
 	
 	#advance to the next level
-	message('You decend deeper into the heart of the earth...', libtcod.red)
+	message('You climb your way out of the earth...', libtcod.red)
 	depth -= 1
 	make_map() #create a fresh new level!
 	initialize_fov()
