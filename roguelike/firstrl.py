@@ -617,7 +617,7 @@ def get_names_under_mouse():
 	names = [obj.name for obj in world.maps['area' + str(depth)].objects
 		if obj.x == x and obj.y == y and libtcod.map_is_in_fov(fov_map, obj.x, obj.y)]
 		
-	names = ', '.join(names) #join the names, seperated by commas
+	names = ', '.join(names) #join the names, separated by commas
 	return names.capitalize()
 
 def move_camera(target_x, target_y):
