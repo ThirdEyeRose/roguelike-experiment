@@ -81,23 +81,11 @@ class Map:
 		self.tiles = []
 		self.objects = []
 		self.portals = []
-		
-class Portal:
-	#this class records relevant information regarding map exits
-	def __init__(x, y, destination)
-		self.x = x
-		self.y = y
-		self.destination = destination
-		#when portals are created, they also record data about
-		#which portal they are linked to.  This should be in 
-		#the form of: world.maps['MAPNAME'].portals[PORTALINDEX]
-		#For simplicity's sake, at the beginning, each map will
-		#only have 2 portal indices - 0 for up, 1 for down
 
 class Object:
 	#this is a generic object: the player, a monster, an item, the stairs...
 	#it's always represented by a character on the screen.
-	def __init__(self, x, y, char, name, color, blocks=False, always_visible=False, fighter=None, ai=None, item = None, equipment = None):
+	def __init__(self, x, y, char, name, color, blocks=False, always_visible=False, fighter=None, ai=None, item = None, equipment = None, portal = None):
 		self.x = x
 		self.y = y
 		self.char = char
@@ -120,6 +108,9 @@ class Object:
 			#there must be an item component for equipment to act properly
 			self.item = Item()
 			self.item.owner = self
+		self.portal = portal
+		if self.portal:
+			self.portal.owner = self
 	
 	def move(self, dx, dy):
 		#move by the given amount, if not blocked
@@ -351,6 +342,16 @@ class Equipment:
 		if not self.is_equipped: return
 		self.is_equipped = False
 		message('Dequipped ' + self.owner.name + ' from ' + self.slot + '.', libtcod.light_yellow)
+		
+class Portal:
+	#this class records relevant information regarding map exits
+	def __init__(destination)
+		self.destination = destination
+		#when portals are created, they also record data about
+		#which portal they are linked to.  This should be in 
+		#the form of: world.maps['MAPNAME'].portals[PORTALINDEX]
+		#For simplicity's sake, at the beginning, each map will
+		#only have 2 portal indices - 0 for up, 1 for down
 		
 class Tile:
 	#a tile of the map and its properties
