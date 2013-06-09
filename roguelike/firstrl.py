@@ -73,6 +73,11 @@ class World:
 	def __init__(self, objects = None, map = None):
 		self.objects = objects
 		self.map = map
+		
+class Map:
+	#this class stores map information so that maps can be persistant
+	def __init__(self, name):
+		self.name = name
 
 class Object:
 	#this is a generic object: the player, a monster, an item, the stairs...
