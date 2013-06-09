@@ -147,7 +147,7 @@ class Object:
 		return math.sqrt((x - self.x) ** 2 + (y - self.y) ** 2)
 	
 	def draw(self):
-		if libtcod.map_is_in_fov(fov_map, self.x, self.y) or (self.always_visible and map[self.x][self.y].explored):
+		if libtcod.map_is_in_fov(fov_map, self.x, self.y) or (self.always_visible and world.map[self.x][self.y].explored):
 			#if object is in visible range
 			(x, y) = to_camera_coordinates(self.x, self.y)
 			#set the color and then draw the character that represents this object at its position
@@ -436,7 +436,7 @@ def play_game():
 def save_game():
 	#open a new empty shelve (possibly overwriting an old one) to write the game data
 	file = shelve.open('savegame', 'n')
-	file['map'] = map
+	file['map'] = world.map
 	file['objects'] = world.objects
 	file['player_index'] = world.objects.index(player) #index of player in objects list
 	file['inventory'] = inventory
@@ -448,11 +448,11 @@ def save_game():
 
 def load_game():
 	#open the previously saved shelve and load the game data
-	global map, player, inventory, game_msgs, game_state, stairs, world
+	global player, inventory, game_msgs, game_state, stairs, world
 	global depth
 	
 	file = shelve.open('savegame', 'r')
-	map = file['map']
+	world.map = file['map']
 	world.objects = file['objects']
 	player = world.objects[file['player_index']] #get index of player in objects list and access it
 	inventory = file['inventory']
@@ -473,7 +473,7 @@ def initialize_fov():
 	fov_map = libtcod.map_new(MAP_WIDTH, MAP_HEIGHT)
 	for y in range(MAP_HEIGHT):
 		for x in range(MAP_WIDTH):
-			libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
+			libtcod.map_set_properties(fov_map, x, y, not world.map[x][y].block_sight, not world.map[x][y].blocked)
 		
 def player_death(player):
 	#the game ended!
@@ -625,7 +625,7 @@ def to_camera_coordinates(x,y):
 	
 def is_blocked(x, y):
 	#first test the map tile
-	if map[x][y].blocked:
+	if world.map[x][y].blocked:
 		return True
 		
 	#now check for any blocking objects
@@ -636,24 +636,24 @@ def is_blocked(x, y):
 	return False
 	
 def make_map():
-	global map, stairs, depth, world
+	global stairs, depth, world
 	
 	#the list of objects with just the player
 	world.objects = [player]
 	
 	if depth == 0:
 		#fill map with "blocked" tiles
-		map = [[ Tile(True, explored=True)
+		world.map = [[ Tile(True, explored=True)
 			for y in range(MAP_HEIGHT) ]
 				for x in range(MAP_WIDTH) ]
 		for x in range(1, MAP_WIDTH - 2):
 			for y in range(1, MAP_HEIGHT - 2):
-				map[x][y].blocked = False
-				map[x][y].block_sight = False	
+				world.map[x][y].blocked = False
+				world.map[x][y].block_sight = False	
 			
 	else:
 		#fill map with "blocked" tiles
-		map = [[ Tile(True)
+		world.map = [[ Tile(True)
 			for y in range(MAP_HEIGHT) ]
 				for x in range(MAP_WIDTH) ]
 			
@@ -736,24 +736,24 @@ def next_level():
 	initialize_fov()
 			
 def create_room(room):
-	global map
+	global world
 	#go through the tiles in the rectangle and make them passable
 	for x in range(room.x1 + 1, room.x2):
 		for y in range(room.y1 + 1, room.y2):
-			map[x][y].blocked = False
-			map[x][y].block_sight = False
+			world.map[x][y].blocked = False
+			world.map[x][y].block_sight = False
 			
 def create_h_tunnel(x1, x2, y):
-	global map
+	global world
 	for x in range(min(x1, x2), max(x1, x2) + 1):
-		map[x][y].blocked = False
-		map[x][y].block_sight = False
+		world.map[x][y].blocked = False
+		world.map[x][y].block_sight = False
 		
 def create_v_tunnel(y1, y2, x):
-	global map
+	global world
 	for y in range(min(y1, y2), max(y1, y2) + 1):
-		map[x][y].blocked = False
-		map[x][y].block_sight = False
+		world.map[x][y].blocked = False
+		world.map[x][y].block_sight = False
 
 def message(new_msg, color = libtcod.white):
 	#split the message if necessary, among mulitple lines
@@ -802,10 +802,10 @@ def render_all():
 				(map_x, map_y) = (camera_x + x, camera_y + y)
 				visible = libtcod.map_is_in_fov(fov_map, map_x, map_y)
 				
-				wall = map[map_x][map_y].block_sight
+				wall = world.map[map_x][map_y].block_sight
 				if not visible:
 					#it's out of the player's FOV
-					if map[map_x][map_y].explored:
+					if world.map[map_x][map_y].explored:
 					#if it's not visible right now, the player can only see it if it's explored
 						if wall:
 							libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET )
@@ -817,7 +817,7 @@ def render_all():
 						libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET )
 					else:
 						libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
-					map[map_x][map_y].explored = True
+					world.map[map_x][map_y].explored = True
 					
 	#draw all objects in the list
 	for object in world.objects:
