@@ -1032,7 +1032,7 @@ def main_menu():
 		#show the game's title, and some credits!
 		libtcod.console_set_default_foreground(0, libtcod.light_yellow)
 		libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER, 'The Universal Reference Frame')
-		libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-2, libtcod.BKGND_NONE, libtcod.CENTER, 'By Pat East')
+		libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-2, libtcod.BKGND_NONE, libtcod.CENTER, 'By Pat East and Scotty Jones')
 		
 		#show options and wait for the player's choice
 		#Have the Player Choose his race
