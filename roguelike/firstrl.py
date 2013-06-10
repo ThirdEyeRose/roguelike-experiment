@@ -54,6 +54,9 @@ TORCH_RADIUS = 10
 
 LIMIT_FPS = 20
 
+#character creation
+PLAYABLE_RACES = ['human', 'dwarf', 'elf']
+
 color_dark_wall = libtcod.Color(56, 50, 19)
 color_light_wall = libtcod.Color(74, 66, 25)
 color_dark_ground = libtcod.Color(102, 94, 46)
@@ -370,6 +373,10 @@ class Rect:
 def new_game():
 	global player, inventory, game_msgs, game_state, depth
 	
+	#Have the Player Choose his race
+	player_race = menu('Choose Race:', PLAYABLE_RACES, 50)
+	player_race = PLAYABLE_RACES[libtcod.console_wait_for_keypress(True).c - ord('a')]
+	
 	#create the object representing the player
 	fighter_component = Fighter(hp=100, mp=5, defense=1, power=2, xp=0, death_function = player_death)
 	player = Object(0, 0, '@', 'player', libtcod.white, blocks=True, fighter=fighter_component)
@@ -391,6 +398,7 @@ def new_game():
 	
 	#A warm welcoming message!
 	message('Welcome stranger! Prepare to perish in the Universal Reference Frame.', libtcod.red)
+	message('You are a ' + str(player_race), libtcod.red)
 	
 	#starting equipment: a dagger
 	equipment_component = Equipment(slot='right hand', power_bonus=2)
@@ -1020,6 +1028,7 @@ def main_menu():
 		libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-2, libtcod.BKGND_NONE, libtcod.CENTER, 'By Pat East')
 		
 		#show options and wait for the player's choice
+		#Have the Player Choose his race
 		choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 24)
 		
 		if key.vk == libtcod.KEY_ENTER and key.lalt:
