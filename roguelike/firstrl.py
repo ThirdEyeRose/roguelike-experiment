@@ -55,7 +55,7 @@ TORCH_RADIUS = 10
 LIMIT_FPS = 20
 
 #character creation
-PLAYABLE_RACES = ['human', 'dwarf', 'elf']
+PLAYABLE_RACES = [{'name':'human'}, {'name':'dwarf'}, {'name':'elf'}]
 
 color_dark_wall = libtcod.Color(56, 50, 19)
 color_light_wall = libtcod.Color(74, 66, 25)
@@ -374,8 +374,12 @@ def new_game():
 	global player, inventory, game_msgs, game_state, depth
 	
 	#Have the Player Choose his race
-	player_race = menu('Choose Race:', PLAYABLE_RACES, 50)
-	player_race = PLAYABLE_RACES[libtcod.console_wait_for_keypress(True).c - ord('a')]
+	options = []
+	for race in PLAYABLE_RACES:
+			text = race['name']
+			options.append(text)
+	player_race = menu('Choose Race:', options, 50)
+	player_race = PLAYABLE_RACES[libtcod.console_wait_for_keypress(True).c - ord('a')]['name']
 	
 	#create the object representing the player
 	fighter_component = Fighter(hp=100, mp=5, defense=1, power=2, xp=0, death_function = player_death)
