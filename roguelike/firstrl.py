@@ -55,7 +55,10 @@ TORCH_RADIUS = 10
 LIMIT_FPS = 20
 
 #character creation
-PLAYABLE_RACES = [{'name':'human'}, {'name':'dwarf'}, {'name':'elf'}]
+PLAYABLE_RACES = [
+	{'name':'human','hp':100,'mp':5,'defense':1,'power':2}, 
+	{'name':'dwarf','hp':150,'mp':3,'defense':2,'power':2}, 
+	{'name':'elf','hp':80,'mp':10,'defense':0,'power':3}]
 
 color_dark_wall = libtcod.Color(56, 50, 19)
 color_light_wall = libtcod.Color(74, 66, 25)
@@ -379,10 +382,10 @@ def new_game():
 			text = race['name']
 			options.append(text)
 	player_race = menu('Choose Race:', options, 50)
-	player_race = PLAYABLE_RACES[libtcod.console_wait_for_keypress(True).c - ord('a')]['name']
+	player_race = PLAYABLE_RACES[libtcod.console_wait_for_keypress(True).c - ord('a')]
 	
 	#create the object representing the player
-	fighter_component = Fighter(hp=100, mp=5, defense=1, power=2, xp=0, death_function = player_death)
+	fighter_component = Fighter(hp=player_race['hp'], mp=player_race['mp'], defense=player_race['defense'], power=player_race['power'], xp=0, death_function = player_death)
 	player = Object(0, 0, '@', 'player', libtcod.white, blocks=True, fighter=fighter_component)
 	
 	player.level = 1
@@ -402,7 +405,7 @@ def new_game():
 	
 	#A warm welcoming message!
 	message('Welcome stranger! Prepare to perish in the Universal Reference Frame.', libtcod.red)
-	message('You are a ' + str(player_race), libtcod.red)
+	message('You are a ' + str(player_race['name'] + '!'), libtcod.red)
 	
 	#starting equipment: a dagger
 	equipment_component = Equipment(slot='right hand', power_bonus=2)
