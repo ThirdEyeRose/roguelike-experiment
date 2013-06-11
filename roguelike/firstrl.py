@@ -56,9 +56,9 @@ LIMIT_FPS = 20
 
 #character creation
 PLAYABLE_RACES = [
-	{'name':'human','hp':100,'mp':5,'defense':1,'power':2}, 
-	{'name':'dwarf','hp':150,'mp':3,'defense':2,'power':2}, 
-	{'name':'elf','hp':80,'mp':10,'defense':0,'power':3}]
+	{'name':'human','hp':100,'mp':5,'defense':1,'power':2, 'speed':10}, 
+	{'name':'dwarf','hp':150,'mp':3,'defense':2,'power':2, 'speed':12}, 
+	{'name':'elf','hp':80,'mp':10,'defense':0,'power':3, 'speed':8}]
 
 color_dark_wall = libtcod.Color(56, 50, 19)
 color_light_wall = libtcod.Color(74, 66, 25)
@@ -73,6 +73,25 @@ libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial'
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 libtcod.sys_set_fps(LIMIT_FPS)
+
+class Ticker(object):
+	#Simple Timer to keep track of turn-taking and implement the idea of speed.
+	def __init__(self):
+		self.ticks = 0 # current ticks--sys.maxint is 2147483647
+		self.schedule = {} # this is the dict of things to do {ticks: [obj1, obj2, ...], ticks+1: [...], ...}
+		
+	def schedule_turn(self, interval, obj):
+		self.schedule.setdefault(self.ticks +interval, []).append(obj)
+		
+	def next_turn(self):
+		things_to_do = self.schedule.pop(self.ticks, [])
+		for obj in things_to_do:
+			if obj.ai:
+				obj.ai.take_turn()
+				
+	def recalculate(self):
+		self.schedule = {}
+	
 
 class Object:
 	#this is a generic object: the player, a monster, an item, the stairs...
@@ -91,6 +110,8 @@ class Object:
 		self.ai = ai
 		if self.ai:
 			self.ai.owner = self
+			self.ticker = ticker
+			self.ticker.schedule_turn(self.fighter.speed, self)
 		self.item = item
 		if self.item:
 			self.item.owner = self
@@ -177,15 +198,21 @@ class Object:
 
 class Fighter:
 	#combat related properties and methods (monster, player, NPC)
-	def __init__(self, hp, defense, power, xp, mp=0, death_function=None):
+	def __init__(self, hp, defense, power, xp, speed=10, mp=0, death_function=None):
 		self.base_max_hp = hp
 		self.hp = hp
 		self.base_max_mp = mp
 		self.mp = mp
 		self.base_defense = defense
 		self.base_power = power
+		self.base_speed = speed
 		self.xp = xp
 		self.death_function = death_function
+		
+	@property
+	def speed(self):
+		bonus = sum(equipment.speed_bonus for equipment in get_all_equipped(self.owner))
+		return self.base_speed + bonus
 		
 	@property
 	def power(self):
@@ -251,6 +278,7 @@ class BasicMonster:
 			#close enough, attack! (if the player is still alive)
 			elif player.fighter.hp > 0:
 				monster.fighter.attack(player)
+		self.owner.ticker.schedule_turn(monster.fighter.speed, monster)     # and schedule the next turn
 
 class ConfusedMonster:
 	#AI for a temporarily confused monster.
@@ -259,18 +287,22 @@ class ConfusedMonster:
 		self.num_turns = num_turns
 	
 	def take_turn(self):
+		monster = self.owner
 		if self.num_turns > 0: #still confused...
 			#move in a random direction, and decrease the number of turns confused
-			self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+			monster.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
 			self.num_turns -= 1
 		else:
-			self.owner.ai = self.old_ai
-			message('The ' + self.owner.name + ' is no longer confused!', libtcod.red)
+			monster.ai = self.old_ai
+			message('The ' + monster.name + ' is no longer confused!', libtcod.red)
+		self.owner.ticker.schedule_turn(monster.fighter.speed, monster)     # and schedule the next turn
 
 class NeutralCreature:
 	#AI for a purely neutral creature
 	def take_turn(self):
-		self.owner.move_random()
+		npc = self.owner
+		npc.move_random()
+		npc.ticker.schedule_turn(npc.fighter.speed, npc)     # and schedule the next turn
 		
 			
 class Item:
@@ -316,13 +348,14 @@ class Item:
 
 class Equipment:
 	#an object that can be equipped, yielding bonuses. automatically adds the Item component.
-	def __init__(self, slot, power_bonus=0, defense_bonus=0, max_hp_bonus=0, max_mp_bonus=0):
+	def __init__(self, slot, power_bonus=0, defense_bonus=0, max_hp_bonus=0, max_mp_bonus=0, speed_bonus=0):
 		self.slot = slot
 		self.is_equipped = False
 		self.power_bonus = power_bonus
 		self.defense_bonus = defense_bonus
 		self.max_hp_bonus = max_hp_bonus
 		self.max_mp_bonus = max_mp_bonus
+		self.speed_bonus = speed_bonus
 		
 	def toggle_equip(self): #toggle equpi/dequip status
 		if self.is_equipped:
@@ -374,7 +407,9 @@ class Rect:
 		return (self.x1 <= other.x2 and self.x2 > other.x1 and self.y1 <= other.y2 and self.y2 >= other.y1)
 
 def new_game():
-	global player, inventory, game_msgs, game_state, depth
+	global player, inventory, game_msgs, game_state, depth, ticker
+	
+	ticker = Ticker()
 	
 	#Have the Player Choose his race
 	options = []
@@ -385,7 +420,7 @@ def new_game():
 	player_race = PLAYABLE_RACES[libtcod.console_wait_for_keypress(True).c - ord('a')]
 	
 	#create the object representing the player
-	fighter_component = Fighter(hp=player_race['hp'], mp=player_race['mp'], defense=player_race['defense'], power=player_race['power'], xp=0, death_function = player_death)
+	fighter_component = Fighter(hp=player_race['hp'], mp=player_race['mp'], defense=player_race['defense'], power=player_race['power'], speed=player_race['speed'], xp=0, death_function = player_death)
 	player = Object(0, 0, '@', 'player', libtcod.white, blocks=True, fighter=fighter_component)
 	
 	player.level = 1
@@ -415,7 +450,7 @@ def new_game():
 	obj.always_visible = True
 	
 def play_game():
-	global camera_x, camera_y, key, mouse
+	global camera_x, camera_y, key, mouse, ticker
 	
 	player_action = None
 	mouse = libtcod.Mouse()
@@ -449,9 +484,9 @@ def play_game():
 
 		#let monsters take their turn
 		if game_state == 'playing' and player_action != 'didnt-take-turn':
-			for object in objects:
-				if object.ai:
-					object.ai.take_turn()
+			for x in range(0, player.fighter.speed):
+				ticker.ticks += 1
+				ticker.next_turn()
 
 def save_game():
 	#open a new empty shelve (possibly overwriting an old one) to write the game data
@@ -511,8 +546,9 @@ def monster_death(monster):
 	monster.char = '%'
 	monster.color = libtcod.dark_red
 	monster.blocks = False
-	monster.fighter = None
 	monster.ai = None
+	monster.fighter = None
+	monster.ticker = None
 	monster.name = 'remains of ' + monster.name
 	monster.send_to_back()
 		
@@ -660,6 +696,7 @@ def make_map():
 	
 	#the list of objects with just the player
 	objects = [player]
+	ticker.recalculate()
 	
 	if depth == 0:
 		#fill map with "blocked" tiles
@@ -907,18 +944,18 @@ def place_objects(room):
 			choice = random_choice(monster_chances)
 			if choice == 'orc': #80% chance of getting an orc
 				#create an orc
-				fighter_component = Fighter(hp=20, defense=0, power=4, xp=35, death_function = monster_death)
 				ai_component = BasicMonster()
+				fighter_component = Fighter(hp=20, defense=0, power=4, speed=12, xp=35, death_function = monster_death)
 				monster = Object(x, y, 'o', 'orc', libtcod.light_green, blocks=True, fighter=fighter_component, ai=ai_component)
 			elif choice == 'troll':
 				#create a troll
-				fighter_component = Fighter(hp=30, defense=2, power=8, xp=100, death_function = monster_death)
 				ai_component = BasicMonster()
+				fighter_component = Fighter(hp=30, defense=2, power=8, speed=15, xp=100, death_function = monster_death)
 				monster = Object(x, y, 'T', 'troll', libtcod.darker_green, blocks=True, fighter=fighter_component, ai=ai_component)
 			elif choice == 'dungeon bunny':
 				#create a dungeon bunny (sample neutral NPC)
-				fighter_component = Fighter(hp=5, defense=1, power=100, xp=2, death_function = monster_death)
 				ai_component = NeutralCreature()
+				fighter_component = Fighter(hp=5, defense=1, power=100, speed=5, xp=2, death_function = monster_death)
 				monster = Object(x, y, '@', 'dungeon bunny', libtcod.light_yellow, blocks=True, fighter=fighter_component, ai=ai_component)
 			
 			objects.append(monster)
