@@ -205,9 +205,14 @@ class Fighter:
 		self.mp = mp
 		self.base_defense = defense
 		self.base_power = power
-		self.speed = speed
+		self.base_speed = speed
 		self.xp = xp
 		self.death_function = death_function
+		
+	@property
+	def speed(self):
+		bonus = sum(equipment.speed_bonus for equipment in get_all_equipped(self.owner))
+		return self.base_speed + bonus
 		
 	@property
 	def power(self):
@@ -343,13 +348,14 @@ class Item:
 
 class Equipment:
 	#an object that can be equipped, yielding bonuses. automatically adds the Item component.
-	def __init__(self, slot, power_bonus=0, defense_bonus=0, max_hp_bonus=0, max_mp_bonus=0):
+	def __init__(self, slot, power_bonus=0, defense_bonus=0, max_hp_bonus=0, max_mp_bonus=0, speed_bonus=0):
 		self.slot = slot
 		self.is_equipped = False
 		self.power_bonus = power_bonus
 		self.defense_bonus = defense_bonus
 		self.max_hp_bonus = max_hp_bonus
 		self.max_mp_bonus = max_mp_bonus
+		self.speed_bonus = speed_bonus
 		
 	def toggle_equip(self): #toggle equpi/dequip status
 		if self.is_equipped:
