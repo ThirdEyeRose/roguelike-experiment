@@ -56,9 +56,9 @@ LIMIT_FPS = 20
 
 #character creation
 PLAYABLE_RACES = [
-	{'name':'human','hp':100,'mp':5,'defense':1,'power':2}, 
-	{'name':'dwarf','hp':150,'mp':3,'defense':2,'power':2}, 
-	{'name':'elf','hp':80,'mp':10,'defense':0,'power':3}]
+	{'name':'human','hp':100,'mp':5,'defense':1,'power':2, 'speed':10}, 
+	{'name':'dwarf','hp':150,'mp':3,'defense':2,'power':2, 'speed':12}, 
+	{'name':'elf','hp':80,'mp':10,'defense':0,'power':3, 'speed':8}]
 
 color_dark_wall = libtcod.Color(56, 50, 19)
 color_light_wall = libtcod.Color(74, 66, 25)
@@ -414,7 +414,7 @@ def new_game():
 	player_race = PLAYABLE_RACES[libtcod.console_wait_for_keypress(True).c - ord('a')]
 	
 	#create the object representing the player
-	fighter_component = Fighter(hp=player_race['hp'], mp=player_race['mp'], defense=player_race['defense'], power=player_race['power'], xp=0, death_function = player_death)
+	fighter_component = Fighter(hp=player_race['hp'], mp=player_race['mp'], defense=player_race['defense'], power=player_race['power'], speed=player_race['speed'], xp=0, death_function = player_death)
 	player = Object(0, 0, '@', 'player', libtcod.white, blocks=True, fighter=fighter_component)
 	
 	player.level = 1
@@ -435,7 +435,6 @@ def new_game():
 	#A warm welcoming message!
 	message('Welcome stranger! Prepare to perish in the Universal Reference Frame.', libtcod.red)
 	message('You are a ' + str(player_race['name'] + '!'), libtcod.red)
-	print ticker.schedule
 	
 	#starting equipment: a dagger
 	equipment_component = Equipment(slot='right hand', power_bonus=2)
@@ -479,10 +478,9 @@ def play_game():
 
 		#let monsters take their turn
 		if game_state == 'playing' and player_action != 'didnt-take-turn':
-			for x in range(0, 10):
+			for x in range(0, player.fighter.speed):
 				ticker.ticks += 1
 				ticker.next_turn()
-				message(str(ticker.ticks))
 
 def save_game():
 	#open a new empty shelve (possibly overwriting an old one) to write the game data
