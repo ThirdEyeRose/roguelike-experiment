@@ -498,7 +498,12 @@ def play_game():
 def save_game():
 	#open a new empty shelve (possibly overwriting an old one) to write the game data
 	file = shelve.open('savegame', 'n')
-	file['map'] = map
+	if file.has_key('maps'):
+		maps = file['maps']
+	else:
+		maps = {}
+	maps[depth] = map
+	file['maps'] = maps
 	file['player_index'] = map.objects.index(player) #index of player in objects list
 	file['inventory'] = inventory
 	file['game_msgs'] = game_msgs
@@ -513,13 +518,13 @@ def load_game():
 	global depth
 	
 	file = shelve.open('savegame', 'r')
-	map = file['map']
+	depth = file['depth']
+	map = file['maps'][depth]
 	player = map.objects[file['player_index']] #get index of player in objects list and access it
 	inventory = file['inventory']
 	game_msgs = file['game_msgs']
 	game_state = file['game_state']
 	stairs = map.objects[file['stairs_index']]
-	depth = file['depth']
 	file.close()
 	
 	initialize_fov()
