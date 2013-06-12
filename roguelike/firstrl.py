@@ -74,6 +74,13 @@ con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 libtcod.sys_set_fps(LIMIT_FPS)
 
+class Map:
+	#This class stores data about maps and replaces the flimsier map system
+	def __init__(self):
+		self.objects = []
+		self.tiles = [[]]
+	
+
 class Ticker(object):
 	#Simple Timer to keep track of turn-taking and implement the idea of speed.
 	def __init__(self):
@@ -176,7 +183,7 @@ class Object:
 		return math.sqrt((x - self.x) ** 2 + (y - self.y) ** 2)
 	
 	def draw(self):
-		if libtcod.map_is_in_fov(fov_map, self.x, self.y) or (self.always_visible and map[self.x][self.y].explored):
+		if libtcod.map_is_in_fov(fov_map, self.x, self.y) or (self.always_visible and map.tiles[self.x][self.y].explored):
 			#if object is in visible range
 			(x, y) = to_camera_coordinates(self.x, self.y)
 			#set the color and then draw the character that represents this object at its position
@@ -528,7 +535,7 @@ def initialize_fov():
 	fov_map = libtcod.map_new(MAP_WIDTH, MAP_HEIGHT)
 	for y in range(MAP_HEIGHT):
 		for x in range(MAP_WIDTH):
-			libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
+			libtcod.map_set_properties(fov_map, x, y, not map.tiles[x][y].block_sight, not map.tiles[x][y].blocked)
 		
 def player_death(player):
 	#the game ended!
@@ -681,7 +688,7 @@ def to_camera_coordinates(x,y):
 	
 def is_blocked(x, y):
 	#first test the map tile
-	if map[x][y].blocked:
+	if map.tiles[x][y].blocked:
 		return True
 		
 	#now check for any blocking objects
@@ -695,22 +702,23 @@ def make_map():
 	global map, objects, stairs, depth
 	
 	#the list of objects with just the player
+	map = Map()
 	objects = [player]
 	ticker.recalculate()
 	
 	if depth == 0:
 		#fill map with "blocked" tiles
-		map = [[ Tile(True, explored=True)
+		map.tiles = [[ Tile(True, explored=True)
 			for y in range(MAP_HEIGHT) ]
 				for x in range(MAP_WIDTH) ]
 		for x in range(1, MAP_WIDTH - 2):
 			for y in range(1, MAP_HEIGHT - 2):
-				map[x][y].blocked = False
-				map[x][y].block_sight = False	
+				map.tiles[x][y].blocked = False
+				map.tiles[x][y].block_sight = False	
 			
 	else:
 		#fill map with "blocked" tiles
-		map = [[ Tile(True)
+		map.tiles = [[ Tile(True)
 			for y in range(MAP_HEIGHT) ]
 				for x in range(MAP_WIDTH) ]
 			
@@ -797,20 +805,20 @@ def create_room(room):
 	#go through the tiles in the rectangle and make them passable
 	for x in range(room.x1 + 1, room.x2):
 		for y in range(room.y1 + 1, room.y2):
-			map[x][y].blocked = False
-			map[x][y].block_sight = False
+			map.tiles[x][y].blocked = False
+			map.tiles[x][y].block_sight = False
 			
 def create_h_tunnel(x1, x2, y):
 	global map
 	for x in range(min(x1, x2), max(x1, x2) + 1):
-		map[x][y].blocked = False
-		map[x][y].block_sight = False
+		map.tiles[x][y].blocked = False
+		map.tiles[x][y].block_sight = False
 		
 def create_v_tunnel(y1, y2, x):
 	global map
 	for y in range(min(y1, y2), max(y1, y2) + 1):
-		map[x][y].blocked = False
-		map[x][y].block_sight = False
+		map.tiles[x][y].blocked = False
+		map.tiles[x][y].block_sight = False
 
 def message(new_msg, color = libtcod.white):
 	#split the message if necessary, among mulitple lines
@@ -859,10 +867,10 @@ def render_all():
 				(map_x, map_y) = (camera_x + x, camera_y + y)
 				visible = libtcod.map_is_in_fov(fov_map, map_x, map_y)
 				
-				wall = map[map_x][map_y].block_sight
+				wall = map.tiles[map_x][map_y].block_sight
 				if not visible:
 					#it's out of the player's FOV
-					if map[map_x][map_y].explored:
+					if map.tiles[map_x][map_y].explored:
 					#if it's not visible right now, the player can only see it if it's explored
 						if wall:
 							libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET )
@@ -874,7 +882,7 @@ def render_all():
 						libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET )
 					else:
 						libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
-					map[map_x][map_y].explored = True
+					map.tiles[map_x][map_y].explored = True
 					
 	#draw all objects in the list
 	for object in objects:
