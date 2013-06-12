@@ -103,7 +103,7 @@ class Ticker(object):
 class Object:
 	#this is a generic object: the player, a monster, an item, the stairs...
 	#it's always represented by a character on the screen.
-	def __init__(self, x, y, char, name, color, blocks=False, always_visible=False, fighter=None, ai=None, item = None, equipment = None):
+	def __init__(self, x, y, char, name, color, blocks=False, always_visible=False, fighter=None, ai=None, item = None, equipment = None, portal = None):
 		self.x = x
 		self.y = y
 		self.char = char
@@ -128,6 +128,9 @@ class Object:
 			#there must be an item component for equipment to act properly
 			self.item = Item()
 			self.item.owner = self
+		self.portal = portal
+		if self.portal:
+			self.portal.owner = self
 	
 	def move(self, dx, dy):
 		#move by the given amount, if not blocked
@@ -285,7 +288,8 @@ class BasicMonster:
 			#close enough, attack! (if the player is still alive)
 			elif player.fighter.hp > 0:
 				monster.fighter.attack(player)
-		self.owner.ticker.schedule_turn(monster.fighter.speed, monster)     # and schedule the next turn
+				
+		monster.ticker.schedule_turn(monster.fighter.speed, monster)     # and schedule the next turn
 
 class ConfusedMonster:
 	#AI for a temporarily confused monster.
@@ -385,6 +389,11 @@ class Equipment:
 		if not self.is_equipped: return
 		self.is_equipped = False
 		message('Dequipped ' + self.owner.name + ' from ' + self.slot + '.', libtcod.light_yellow)
+
+class Portal:
+	#This class handles connections from one map to another
+	def __init__(self, modifier):
+		self.modifier = modifier
 		
 class Tile:
 	#a tile of the map and its properties
@@ -498,7 +507,7 @@ def play_game():
 def save_game():
 	#open a new empty shelve (possibly overwriting an old one) to write the game data
 	file = shelve.open('savegame', 'n')
-	if file.has_key('maps'):
+	if 'maps' in file:
 		maps = file['maps']
 	else:
 		maps = {}
@@ -508,14 +517,16 @@ def save_game():
 	file['inventory'] = inventory
 	file['game_msgs'] = game_msgs
 	file['game_state'] = game_state
-	file['stairs_index'] = map.objects.index(stairs)
 	file['depth'] = depth
+	file['ticks'] = ticker.ticks
 	file.close()
 
 def load_game():
 	#open the previously saved shelve and load the game data
 	global map, player, inventory, game_msgs, game_state, stairs
-	global depth
+	global depth, ticker
+	
+	ticker = Ticker()
 	
 	file = shelve.open('savegame', 'r')
 	depth = file['depth']
@@ -524,8 +535,16 @@ def load_game():
 	inventory = file['inventory']
 	game_msgs = file['game_msgs']
 	game_state = file['game_state']
-	stairs = map.objects[file['stairs_index']]
+	ticker.ticks = file['ticks']
 	file.close()
+	
+	for object in map.objects:
+		if object.ai != None:
+			object.ticker = ticker
+			object.ticker.schedule_turn(object.fighter.speed, object)
+	#on load, objects freeze
+	#don't know why
+	#objects still take turn, but aren't animated and don't change x/y positions
 	
 	initialize_fov()
 	
@@ -637,10 +656,11 @@ def handle_keys():
 				if chosen_item is not None:
 					chosen_item.drop()
 					
-			if key_char == '>':
+			if key_char == '>' or key_char == '<':
 				#go down stairs, if the player is on them
-				if stairs.x == player.x and stairs.y == player.y:
-					change_level(1)
+				for object in map.objects: #look for an item in the player's tile
+					if object.x == player.x and object.y == player.y and object.portal:
+						change_level(object.portal.modifier)
 					
 			if key_char == 'c':
 				#show character info
@@ -702,7 +722,7 @@ def is_blocked(x, y):
 	return False
 	
 def make_map():
-	global map, stairs, depth
+	global map, depth
 	
 	#the list of objects with just the player
 	map = Map()
@@ -765,6 +785,11 @@ def make_map():
 						#this is the first room, where the player starts at
 						player.x = x
 						player.y = y
+						#create stairs at the center of the last room
+						if depth > 0:
+							stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible = True, portal = Portal(-1))
+							map.objects.append(stairs)
+							stairs.send_to_back() #so it's drawn below monsters
 						placed = True
 					else:
 						x += 1
@@ -790,7 +815,7 @@ def make_map():
 			num_rooms += 1
 			
 	#create stairs at the center of the last room
-	stairs = Object(new_x, new_y, '>', 'stairs', libtcod.white, always_visible = True)
+	stairs = Object(new_x, new_y, '>', 'stairs', libtcod.white, always_visible = True, portal = Portal(1))
 	map.objects.append(stairs)
 	stairs.send_to_back() #so it's drawn below monsters
 
@@ -803,14 +828,14 @@ def change_level(depth_modifier):
 	message('You decend deeper into the heart of the earth...', libtcod.red)
 	depth += depth_modifier
 	file = shelve.open('savegame', 'r')
-	if file.has_key('maps') and file['maps'].has_key(depth):
-		depth = file['depth']
-		map = file['maps'][depth]
+	maps = file['maps']
+	print maps
+	if depth in maps:
+		map = maps[depth]
 		player = map.objects[file['player_index']] #get index of player in objects list and access it
 		inventory = file['inventory']
 		game_msgs = file['game_msgs']
 		game_state = file['game_state']
-		stairs = map.objects[file['stairs_index']]
 	else:
 		make_map() #create a fresh new level!
 	file.close()
