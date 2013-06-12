@@ -640,7 +640,7 @@ def handle_keys():
 			if key_char == '>':
 				#go down stairs, if the player is on them
 				if stairs.x == player.x and stairs.y == player.y:
-					next_level()
+					change_level(1)
 					
 			if key_char == 'c':
 				#show character info
@@ -794,14 +794,14 @@ def make_map():
 	map.objects.append(stairs)
 	stairs.send_to_back() #so it's drawn below monsters
 
-def next_level():
+def change_level(depth_modifier):
 	global depth
 	
 	save_game()
 	
 	#advance to the next level
 	message('You decend deeper into the heart of the earth...', libtcod.red)
-	depth += 1
+	depth += depth_modifier
 	file = shelve.open('savegame', 'r')
 	if file.has_key('maps') and file['maps'].has_key(depth):
 		depth = file['depth']
