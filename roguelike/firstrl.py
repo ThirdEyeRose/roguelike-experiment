@@ -797,10 +797,23 @@ def make_map():
 def next_level():
 	global depth
 	
+	save_game()
+	
 	#advance to the next level
 	message('You decend deeper into the heart of the earth...', libtcod.red)
 	depth += 1
-	make_map() #create a fresh new level!
+	file = shelve.open('savegame', 'r')
+	if file.has_key('maps') and file['maps'].has_key(depth):
+		depth = file['depth']
+		map = file['maps'][depth]
+		player = map.objects[file['player_index']] #get index of player in objects list and access it
+		inventory = file['inventory']
+		game_msgs = file['game_msgs']
+		game_state = file['game_state']
+		stairs = map.objects[file['stairs_index']]
+	else:
+		make_map() #create a fresh new level!
+	file.close()
 	initialize_fov()
 			
 def create_room(room):
