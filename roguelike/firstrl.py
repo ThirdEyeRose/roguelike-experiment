@@ -465,6 +465,9 @@ def new_game():
 	equipment_component.equip()
 	obj.always_visible = True
 	
+	#Initialize save
+	save_game(is_new=True)
+	
 def play_game():
 	global camera_x, camera_y, key, mouse, ticker
 	
@@ -504,9 +507,13 @@ def play_game():
 				ticker.ticks += 1
 				ticker.next_turn()
 
-def save_game():
+def save_game(is_new=False):
 	#open a new empty shelve (possibly overwriting an old one) to write the game data
-	file = shelve.open('savegame', 'n')
+	if is_new:
+		file = shelve.open('savegame',flag='n')
+	else:
+		file = shelve.open('savegame',flag='c') #,'n' seems to overwrite the previous file
+		
 	if 'maps' in file:
 		maps = file['maps']
 	else:
@@ -542,9 +549,6 @@ def load_game():
 		if object.ai != None:
 			object.ticker = ticker
 			object.ticker.schedule_turn(object.fighter.speed, object)
-	#on load, objects freeze
-	#don't know why
-	#objects still take turn, but aren't animated and don't change x/y positions
 	
 	initialize_fov()
 	
@@ -839,6 +843,7 @@ def change_level(depth_modifier):
 	else:
 		make_map() #create a fresh new level!
 	file.close()
+	
 	initialize_fov()
 			
 def create_room(room):
