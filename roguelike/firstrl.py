@@ -552,6 +552,39 @@ def load_game():
 	
 	initialize_fov()
 	
+def save_map():
+	#open a shelve to write the map data.  If game has not been saved, create new savegame
+	file = shelve.open('savegame',flag='c') #,'n' seems to overwrite the previous file
+		
+	if 'maps' in file:
+		maps = file['maps']
+	else:
+		maps = {}
+	if player in map.objects:
+		map.objects.remove(player)
+	maps[depth] = map
+	file['maps'] = maps
+	file.close()
+
+def load_map():
+	global map
+
+	file = shelve.open('savegame', 'r')
+	maps = file['maps']
+	if depth in maps:
+		map = maps[depth]
+		ticker.recalculate()
+		for object in map.objects:
+			if object.ai != None:
+				object.ticker = ticker
+				object.ticker.schedule_turn(object.fighter.speed, object)
+		map.objects.append(player)
+	else:
+		make_map() #create a fresh new level!
+	file.close()
+	
+	initialize_fov()
+	
 def initialize_fov():
 	global fov_recompute, fov_map
 	fov_recompute = True
@@ -826,25 +859,17 @@ def make_map():
 def change_level(depth_modifier):
 	global depth
 	
-	save_game()
+	save_map()
 	
 	#advance to the next level
-	message('You decend deeper into the heart of the earth...', libtcod.red)
+	if depth_modifier > 0:
+		message('You decend deeper into the heart of the earth...', libtcod.red)
+	elif depth_modifier < 0:
+		message('You stagger farther out of the earth...', libtcod.red)
 	depth += depth_modifier
-	file = shelve.open('savegame', 'r')
-	maps = file['maps']
-	print maps
-	if depth in maps:
-		map = maps[depth]
-		player = map.objects[file['player_index']] #get index of player in objects list and access it
-		inventory = file['inventory']
-		game_msgs = file['game_msgs']
-		game_state = file['game_state']
-	else:
-		make_map() #create a fresh new level!
-	file.close()
 	
-	initialize_fov()
+	load_map()
+
 			
 def create_room(room):
 	global map
