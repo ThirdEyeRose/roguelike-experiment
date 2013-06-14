@@ -790,8 +790,8 @@ def make_map():
 		w = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
 		h = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
 		#random position without going out of the boundaries of the map
-		x = libtcod.random_get_int(0, 0, MAP_WIDTH - w - 1)
-		y = libtcod.random_get_int(0, 0, MAP_HEIGHT - h - 1)
+		x = libtcod.random_get_int(0, 0, MAP_WIDTH - w - 2)
+		y = libtcod.random_get_int(0, 0, MAP_HEIGHT - h - 2)
 		
 		#"Rect" class makes rectangles easier to work with
 		new_room = Rect(x, y, w, h)
