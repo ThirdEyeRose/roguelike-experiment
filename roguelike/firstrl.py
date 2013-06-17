@@ -74,6 +74,13 @@ con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 libtcod.sys_set_fps(LIMIT_FPS)
 
+class Map:
+	#This class stores data about maps and replaces the flimsier map system
+	def __init__(self):
+		self.objects = []
+		self.tiles = [[]]
+	
+
 class Ticker(object):
 	#Simple Timer to keep track of turn-taking and implement the idea of speed.
 	def __init__(self):
@@ -96,7 +103,7 @@ class Ticker(object):
 class Object:
 	#this is a generic object: the player, a monster, an item, the stairs...
 	#it's always represented by a character on the screen.
-	def __init__(self, x, y, char, name, color, blocks=False, always_visible=False, fighter=None, ai=None, item = None, equipment = None):
+	def __init__(self, x, y, char, name, color, blocks=False, always_visible=False, fighter=None, ai=None, item = None, equipment = None, portal = None):
 		self.x = x
 		self.y = y
 		self.char = char
@@ -121,6 +128,9 @@ class Object:
 			#there must be an item component for equipment to act properly
 			self.item = Item()
 			self.item.owner = self
+		self.portal = portal
+		if self.portal:
+			self.portal.owner = self
 	
 	def move(self, dx, dy):
 		#move by the given amount, if not blocked
@@ -176,7 +186,7 @@ class Object:
 		return math.sqrt((x - self.x) ** 2 + (y - self.y) ** 2)
 	
 	def draw(self):
-		if libtcod.map_is_in_fov(fov_map, self.x, self.y) or (self.always_visible and map[self.x][self.y].explored):
+		if libtcod.map_is_in_fov(fov_map, self.x, self.y) or (self.always_visible and map.tiles[self.x][self.y].explored):
 			#if object is in visible range
 			(x, y) = to_camera_coordinates(self.x, self.y)
 			#set the color and then draw the character that represents this object at its position
@@ -192,9 +202,9 @@ class Object:
 		
 	def send_to_back(self):
 		#make this object be drawn first, so all others appear above it if they're in the same tile
-		global objects
-		objects.remove(self)
-		objects.insert(0, self)
+		global map
+		map.objects.remove(self)
+		map.objects.insert(0, self)
 
 class Fighter:
 	#combat related properties and methods (monster, player, NPC)
@@ -278,7 +288,8 @@ class BasicMonster:
 			#close enough, attack! (if the player is still alive)
 			elif player.fighter.hp > 0:
 				monster.fighter.attack(player)
-		self.owner.ticker.schedule_turn(monster.fighter.speed, monster)     # and schedule the next turn
+				
+		monster.ticker.schedule_turn(monster.fighter.speed, monster)     # and schedule the next turn
 
 class ConfusedMonster:
 	#AI for a temporarily confused monster.
@@ -316,7 +327,7 @@ class Item:
 			message('Your inventory is full, cannot pick up ' + self.owner.name + '.', libtcod.red)
 		else:
 			inventory.append(self.owner)
-			objects.remove(self.owner)
+			map.objects.remove(self.owner)
 			message('You picked up a ' + self.owner.name + '!', libtcod.green)
 		
 		#special case: automatically equip, if the corresponding equipment slot is unused
@@ -338,7 +349,7 @@ class Item:
 				
 	def drop(self):
 		#add to the map and remove from the player's inventory. also, place it at the player's coordinates
-		objects.append(self.owner)
+		map.objects.append(self.owner)
 		inventory.remove(self.owner)
 		self.owner.x = player.x
 		self.owner.y = player.y
@@ -378,6 +389,11 @@ class Equipment:
 		if not self.is_equipped: return
 		self.is_equipped = False
 		message('Dequipped ' + self.owner.name + ' from ' + self.slot + '.', libtcod.light_yellow)
+
+class Portal:
+	#This class handles connections from one map to another
+	def __init__(self, modifier):
+		self.modifier = modifier
 		
 class Tile:
 	#a tile of the map and its properties
@@ -449,6 +465,9 @@ def new_game():
 	equipment_component.equip()
 	obj.always_visible = True
 	
+	#Initialize save
+	save_game(is_new=True)
+	
 def play_game():
 	global camera_x, camera_y, key, mouse, ticker
 	
@@ -473,7 +492,7 @@ def play_game():
 		check_level_up()
 	
 		#erase all objects at their old locations, before they move
-		for object in objects:
+		for object in map.objects:
 			object.clear()
 	
 		#handle keys and exit game if needed
@@ -488,33 +507,80 @@ def play_game():
 				ticker.ticks += 1
 				ticker.next_turn()
 
-def save_game():
+def save_game(is_new=False):
 	#open a new empty shelve (possibly overwriting an old one) to write the game data
-	file = shelve.open('savegame', 'n')
-	file['map'] = map
-	file['objects'] = objects
-	file['player_index'] = objects.index(player) #index of player in objects list
+	if is_new:
+		file = shelve.open('savegame',flag='n')
+	else:
+		file = shelve.open('savegame',flag='c') #,'n' seems to overwrite the previous file
+		
+	if 'maps' in file:
+		maps = file['maps']
+	else:
+		maps = {}
+	maps[depth] = map
+	file['maps'] = maps
+	file['player_index'] = map.objects.index(player) #index of player in objects list
 	file['inventory'] = inventory
 	file['game_msgs'] = game_msgs
 	file['game_state'] = game_state
-	file['stairs_index'] = objects.index(stairs)
 	file['depth'] = depth
+	file['ticks'] = ticker.ticks
 	file.close()
 
 def load_game():
 	#open the previously saved shelve and load the game data
-	global map, objects, player, inventory, game_msgs, game_state, stairs
-	global depth
+	global map, player, inventory, game_msgs, game_state, stairs
+	global depth, ticker
+	
+	ticker = Ticker()
 	
 	file = shelve.open('savegame', 'r')
-	map = file['map']
-	objects = file['objects']
-	player = objects[file['player_index']] #get index of player in objects list and access it
+	depth = file['depth']
+	map = file['maps'][depth]
+	player = map.objects[file['player_index']] #get index of player in objects list and access it
 	inventory = file['inventory']
 	game_msgs = file['game_msgs']
 	game_state = file['game_state']
-	stairs = objects[file['stairs_index']]
-	depth = file['depth']
+	ticker.ticks = file['ticks']
+	file.close()
+	
+	for object in map.objects:
+		if object.ai != None:
+			object.ticker = ticker
+			object.ticker.schedule_turn(object.fighter.speed, object)
+	
+	initialize_fov()
+	
+def save_map():
+	#open a shelve to write the map data.  If game has not been saved, create new savegame
+	file = shelve.open('savegame',flag='c') #,'n' seems to overwrite the previous file
+		
+	if 'maps' in file:
+		maps = file['maps']
+	else:
+		maps = {}
+	if player in map.objects:
+		map.objects.remove(player)
+	maps[depth] = map
+	file['maps'] = maps
+	file.close()
+
+def load_map():
+	global map
+
+	file = shelve.open('savegame', 'r')
+	maps = file['maps']
+	if depth in maps:
+		map = maps[depth]
+		ticker.recalculate()
+		for object in map.objects:
+			if object.ai != None:
+				object.ticker = ticker
+				object.ticker.schedule_turn(object.fighter.speed, object)
+		map.objects.append(player)
+	else:
+		make_map() #create a fresh new level!
 	file.close()
 	
 	initialize_fov()
@@ -528,7 +594,7 @@ def initialize_fov():
 	fov_map = libtcod.map_new(MAP_WIDTH, MAP_HEIGHT)
 	for y in range(MAP_HEIGHT):
 		for x in range(MAP_WIDTH):
-			libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
+			libtcod.map_set_properties(fov_map, x, y, not map.tiles[x][y].block_sight, not map.tiles[x][y].blocked)
 		
 def player_death(player):
 	#the game ended!
@@ -561,7 +627,7 @@ def player_move_or_attack(dx, dy):
 	
 	#try to find an attackable object there
 	target = None
-	for object in objects:
+	for object in map.objects:
 		if object.fighter and object.x == x and object.y == y:
 			target = object
 			break
@@ -610,7 +676,7 @@ def handle_keys():
 			
 			if key_char == 'g':
 				#pick up an item
-				for object in objects: #look for an item in the player's tile
+				for object in map.objects: #look for an item in the player's tile
 					if object.x == player.x and object.y == player.y and object.item:
 						object.item.pick_up()
 						break
@@ -627,10 +693,11 @@ def handle_keys():
 				if chosen_item is not None:
 					chosen_item.drop()
 					
-			if key_char == '>':
+			if key_char == '>' or key_char == '<':
 				#go down stairs, if the player is on them
-				if stairs.x == player.x and stairs.y == player.y:
-					next_level()
+				for object in map.objects: #look for an item in the player's tile
+					if object.x == player.x and object.y == player.y and object.portal:
+						change_level(object.portal.modifier)
 					
 			if key_char == 'c':
 				#show character info
@@ -647,7 +714,7 @@ def get_names_under_mouse():
 	(x, y) = (camera_x + x, camera_y + y) #from screen to map coordinates
 	
 	#create a list with the names of all objects at the mouse's coordinates and in FOV
-	names = [obj.name for obj in objects
+	names = [obj.name for obj in map.objects
 		if obj.x == x and obj.y == y and libtcod.map_is_in_fov(fov_map, obj.x, obj.y)]
 		
 	names = ', '.join(names) #join the names, seperated by commas
@@ -681,36 +748,37 @@ def to_camera_coordinates(x,y):
 	
 def is_blocked(x, y):
 	#first test the map tile
-	if map[x][y].blocked:
+	if map.tiles[x][y].blocked:
 		return True
 		
 	#now check for any blocking objects
-	for object in objects:
+	for object in map.objects:
 		if object.blocks and object.x == x and object.y == y:
 			return True
 			
 	return False
 	
 def make_map():
-	global map, objects, stairs, depth
+	global map, depth
 	
 	#the list of objects with just the player
-	objects = [player]
+	map = Map()
+	map.objects = [player]
 	ticker.recalculate()
 	
 	if depth == 0:
 		#fill map with "blocked" tiles
-		map = [[ Tile(True, explored=True)
+		map.tiles = [[ Tile(True, explored=True)
 			for y in range(MAP_HEIGHT) ]
 				for x in range(MAP_WIDTH) ]
 		for x in range(1, MAP_WIDTH - 2):
 			for y in range(1, MAP_HEIGHT - 2):
-				map[x][y].blocked = False
-				map[x][y].block_sight = False	
+				map.tiles[x][y].blocked = False
+				map.tiles[x][y].block_sight = False	
 			
 	else:
 		#fill map with "blocked" tiles
-		map = [[ Tile(True)
+		map.tiles = [[ Tile(True)
 			for y in range(MAP_HEIGHT) ]
 				for x in range(MAP_WIDTH) ]
 			
@@ -722,8 +790,8 @@ def make_map():
 		w = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
 		h = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
 		#random position without going out of the boundaries of the map
-		x = libtcod.random_get_int(0, 0, MAP_WIDTH - w - 1)
-		y = libtcod.random_get_int(0, 0, MAP_HEIGHT - h - 1)
+		x = libtcod.random_get_int(0, 0, MAP_WIDTH - w - 2)
+		y = libtcod.random_get_int(0, 0, MAP_HEIGHT - h - 2)
 		
 		#"Rect" class makes rectangles easier to work with
 		new_room = Rect(x, y, w, h)
@@ -754,6 +822,11 @@ def make_map():
 						#this is the first room, where the player starts at
 						player.x = x
 						player.y = y
+						#create stairs at the center of the last room
+						if depth > 0:
+							stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible = True, portal = Portal(-1))
+							map.objects.append(stairs)
+							stairs.send_to_back() #so it's drawn below monsters
 						placed = True
 					else:
 						x += 1
@@ -779,38 +852,44 @@ def make_map():
 			num_rooms += 1
 			
 	#create stairs at the center of the last room
-	stairs = Object(new_x, new_y, '>', 'stairs', libtcod.white, always_visible = True)
-	objects.append(stairs)
+	stairs = Object(new_x, new_y, '>', 'stairs', libtcod.white, always_visible = True, portal = Portal(1))
+	map.objects.append(stairs)
 	stairs.send_to_back() #so it's drawn below monsters
 
-def next_level():
+def change_level(depth_modifier):
 	global depth
 	
+	save_map()
+	
 	#advance to the next level
-	message('You decend deeper into the heart of the earth...', libtcod.red)
-	depth += 1
-	make_map() #create a fresh new level!
-	initialize_fov()
+	if depth_modifier > 0:
+		message('You decend deeper into the heart of the earth...', libtcod.red)
+	elif depth_modifier < 0:
+		message('You stagger farther out of the earth...', libtcod.red)
+	depth += depth_modifier
+	
+	load_map()
+
 			
 def create_room(room):
 	global map
 	#go through the tiles in the rectangle and make them passable
 	for x in range(room.x1 + 1, room.x2):
 		for y in range(room.y1 + 1, room.y2):
-			map[x][y].blocked = False
-			map[x][y].block_sight = False
+			map.tiles[x][y].blocked = False
+			map.tiles[x][y].block_sight = False
 			
 def create_h_tunnel(x1, x2, y):
 	global map
 	for x in range(min(x1, x2), max(x1, x2) + 1):
-		map[x][y].blocked = False
-		map[x][y].block_sight = False
+		map.tiles[x][y].blocked = False
+		map.tiles[x][y].block_sight = False
 		
 def create_v_tunnel(y1, y2, x):
 	global map
 	for y in range(min(y1, y2), max(y1, y2) + 1):
-		map[x][y].blocked = False
-		map[x][y].block_sight = False
+		map.tiles[x][y].blocked = False
+		map.tiles[x][y].block_sight = False
 
 def message(new_msg, color = libtcod.white):
 	#split the message if necessary, among mulitple lines
@@ -859,10 +938,10 @@ def render_all():
 				(map_x, map_y) = (camera_x + x, camera_y + y)
 				visible = libtcod.map_is_in_fov(fov_map, map_x, map_y)
 				
-				wall = map[map_x][map_y].block_sight
+				wall = map.tiles[map_x][map_y].block_sight
 				if not visible:
 					#it's out of the player's FOV
-					if map[map_x][map_y].explored:
+					if map.tiles[map_x][map_y].explored:
 					#if it's not visible right now, the player can only see it if it's explored
 						if wall:
 							libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET )
@@ -874,10 +953,10 @@ def render_all():
 						libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET )
 					else:
 						libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
-					map[map_x][map_y].explored = True
+					map.tiles[map_x][map_y].explored = True
 					
 	#draw all objects in the list
-	for object in objects:
+	for object in map.objects:
 		if object != player:
 			object.draw()
 	player.draw()
@@ -958,7 +1037,7 @@ def place_objects(room):
 				fighter_component = Fighter(hp=5, defense=1, power=100, speed=5, xp=2, death_function = monster_death)
 				monster = Object(x, y, '@', 'dungeon bunny', libtcod.light_yellow, blocks=True, fighter=fighter_component, ai=ai_component)
 			
-			objects.append(monster)
+			map.objects.append(monster)
 			
 	#choose random number of items
 	num_items = libtcod.random_get_int(0, 0, max_items)
@@ -996,7 +1075,7 @@ def place_objects(room):
 				equipment_component = Equipment(slot='left hand', defense_bonus=1)
 				item = Object(x, y, '[', 'shield', libtcod.darker_orange, equipment=equipment_component)
 			
-			objects.append(item)
+			map.objects.append(item)
 			item.send_to_back() #items appear below other objects
 
 def menu(header, options, width):
@@ -1134,7 +1213,7 @@ def cast_fireball():
 	if x is None: return 'cancelled'
 	message('The fireball explodes, burning everything within ' + str(FIREBALL_RADIUS) + ' tiles!', libtcod.orange)
 	
-	for obj in objects: #damage every fighter in range, including the player
+	for obj in map.objects: #damage every fighter in range, including the player
 		if obj.distance(x,y) <= FIREBALL_RADIUS and obj.fighter:
 			message('The ' + obj.name + ' gets burned for ' + str(FIREBALL_DAMAGE) + ' hit points.', libtcod.orange)
 			obj.fighter.take_damage(FIREBALL_DAMAGE)
@@ -1144,7 +1223,7 @@ def closest_monster(max_range):
 	closest_enemy = None
 	closest_dist = max_range + 1
 	
-	for object in objects:
+	for object in map.objects:
 		if object.fighter and not object == player and libtcod.map_is_in_fov(fov_map, object.x, object.y):
 			#calculate distance between this object and the player
 			dist = player.distance_to(object)
@@ -1179,7 +1258,7 @@ def target_monster(max_range = None):
 			return None
 		
 		#return the first clicked monster, otherwise continue looping
-		for obj in objects:
+		for obj in map.objects:
 			if obj.x == x and obj.y == y and obj.fighter and obj != player:
 				return obj
 
